@@ -1,7 +1,7 @@
 /**
- * Propfein API contract consumed by Group Sweat.
+ * Propfein API contract consumed by Last Leg.
  * Mirrors "Phase 1: Propfein API contract" in the Build Plan.
- * Group Sweat stores NO sports data; everything here comes from Propfein.
+ * Last Leg stores NO sports data; everything here comes from Propfein.
  *
  * All times are UTC ISO 8601. All odds are American integers.
  * Team and player ids are Propfein's own stable ids.

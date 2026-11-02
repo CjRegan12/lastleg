@@ -1,5 +1,5 @@
--- Group Sweat: core schema
--- Phase 2 of the Build Plan. Group Sweat stores NO sports data; legs reference
+-- Last Leg: core schema
+-- Phase 2 of the Build Plan. Last Leg stores NO sports data; legs reference
 -- Propfein ids as text. Enums everywhere a value is a closed set.
 
 create extension if not exists citext;

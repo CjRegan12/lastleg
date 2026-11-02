@@ -1,6 +1,6 @@
 # DECISIONS.md
 
-Mirror of the Decisions table in the Group Sweat Build Plan (Claude Doc). This file is law for any build session. Deviations get asked, not improvised.
+Mirror of the Decisions table in the Last Leg Build Plan (Claude Doc). This file is law for any build session. Deviations get asked, not improvised.
 
 | Area | Decision |
 | --- | --- |

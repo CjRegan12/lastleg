@@ -76,6 +76,6 @@ export const SPORTS: readonly Database["public"]["Enums"]["sport"][] = [
   "other",
 ] as const;
 
-export const APP_NAME = "Group Sweat";
-export const WEB_JOIN_BASE = "https://groupsweat.app/join";
-export const APP_SCHEME_JOIN_BASE = "groupsweat://join";
+export const APP_NAME = "Last Leg";
+export const WEB_JOIN_BASE = "https://lastleg.io/join";
+export const APP_SCHEME_JOIN_BASE = "lastleg://join";

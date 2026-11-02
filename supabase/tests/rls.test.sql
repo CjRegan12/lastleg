@@ -1,4 +1,4 @@
--- RLS tests for Group Sweat. Run with: supabase test db
+-- RLS tests for Last Leg. Run with: supabase test db
 -- Requires pgTAP (enabled by `supabase test db`). Uses seed data ids.
 begin;
 select plan(17);

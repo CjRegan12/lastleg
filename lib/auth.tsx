@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!__DEV__) return;
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: "groupsweat://" },
+      options: { emailRedirectTo: "lastleg://" },
     });
     if (error) throw error;
   }, []);

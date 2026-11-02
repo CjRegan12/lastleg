@@ -4,7 +4,7 @@
  *
  * Two modes:
  *  - live: hits PROPFEIN_API_URL with a bearer key
- *  - mock: returns deterministic fixtures so Group Sweat can be built and
+ *  - mock: returns deterministic fixtures so Last Leg can be built and
  *          tested before the Propfein API exists. Mock mode is selected when
  *          the base URL is "mock".
  */

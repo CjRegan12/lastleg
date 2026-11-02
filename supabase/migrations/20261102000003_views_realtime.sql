@@ -1,4 +1,4 @@
--- Group Sweat: derived views, realtime broadcast, storage bucket, cron
+-- Last Leg: derived views, realtime broadcast, storage bucket, cron
 
 -- ---------- views ----------
 -- Season standings per room member. Plain view; materialize only when slow.

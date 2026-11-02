@@ -1,6 +1,6 @@
-# Supabase CLI config for Group Sweat.
+# Supabase CLI config for Last Leg.
 # Generated shape matches `supabase init`; only the values we care about are set.
-project_id = "group-sweat"
+project_id = "lastleg"
 
 [api]
 enabled = true
@@ -30,8 +30,8 @@ file_size_limit = "10MiB"
 
 [auth]
 enabled = true
-site_url = "groupsweat://"
-additional_redirect_urls = ["groupsweat://", "https://groupsweat.app"]
+site_url = "lastleg://"
+additional_redirect_urls = ["lastleg://", "https://lastleg.io"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 enable_signup = true

@@ -1,4 +1,4 @@
--- Group Sweat: RLS policies and RPCs
+-- Last Leg: RLS policies and RPCs
 -- Rule: everything scoped by room_id is visible only to room members.
 -- Grader, parser and push sender run as service role and bypass RLS by design.
 

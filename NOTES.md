@@ -1,7 +1,7 @@
-# group-sweat: v1 codebase written and reviewed, awaiting infra (1)
+# lastleg: v1 codebase written and reviewed, awaiting infra (1)
 
 ## Done this session
-- Full v1 repo authored at /home/claude/group-sweat (cloud container; npm registry and Deno were unreachable, so nothing was installed or executed except the grading tests on Node 22).
+- Full v1 repo authored at /home/claude/lastleg (cloud container; npm registry and Deno were unreachable, so nothing was installed or executed except the grading tests on Node 22).
 - Propfein API contract (`lib/api/propfein.types.ts`), typed client with mock mode, mirrored into `supabase/functions/_shared/`.
 - Three migrations: schema (enums, tables, triggers, invite codes), RLS (column grants, insert guard triggers on slips and legs, `me` view, RPCs create_room / join_room / ensure_slate / override_leg / rollup_slip), views + broadcast triggers + storage bucket + cron cleanup. Seed with 2 users / 1 room / 4 slips / 12 legs. pgTAP RLS test with 17 assertions.
 - Grading engine `lib/grading/grade.ts` (gradeLeg, rollupSlip, detectTransitions), 77 tests incl. a 6-snapshot replay. All pass.
@@ -15,7 +15,7 @@
 - Product calls made during build: one_away only for parlays (legs_total > 1); slips land on the slate of their earliest game date, clamped [today-1, today+10]; parser escalates only on low confidence/refusal; functions fail closed without PROPFEIN_API_URL (ALLOW_MOCK_PROPFEIN=true for dev); other users see only handle/avatar, own profile via `me` view.
 
 ## Next steps
-1. CJ: create empty GitHub repo CjRegan12/group-sweat, then push from /home/claude/group-sweat (`git remote add origin ... && git push -u origin main`). Or re-run with folder access so the repo lands in C:\Users\regan\source\repos.
+1. CJ: create empty GitHub repo CjRegan12/lastleg, then push from /home/claude/lastleg (`git remote add origin ... && git push -u origin main`). Or re-run with folder access so the repo lands in C:\Users\regan\source\repos.
 2. CJ: resolve the Supabase project creation (free plan cap: inkbook + edgefinder already active). Then `supabase link`, `supabase db push`, `supabase db reset` (local) and `supabase test db` to run the 17 RLS assertions. Fix anything that fails; nothing SQL has been executed yet.
 3. On Windows: `npm install`, `npx expo install --fix`, `npm run typecheck`. Expect a handful of type errors from hand-written supabase-js relation types; regenerate `lib/database.types.ts` with `supabase gen types typescript --linked` after db push.
 4. Deploy functions per `supabase/functions/README.md`; set secrets; run `scripts/schedule-grader.sql`. Smoke-test grade-legs against the seed with PROPFEIN_API_URL=mock ALLOW_MOCK_PROPFEIN=true.
@@ -23,7 +23,7 @@
 6. Collect 20 real DK/FanDuel slip screenshots into evals/slips and run `node --experimental-strip-types scripts/eval-parse.ts`.
 
 ## Open questions for the user
-- App name (Group Sweat is a placeholder); bundle id is com.groupsweat.app placeholder.
+- Name decided 2026-11-02: Last Leg, domain lastleg.io (buy it), bundle id io.lastleg.app, scheme lastleg://. GitHub repo should be CjRegan12/lastleg.
 - Confirm the product calls above.
 - Keep browsing-forward ensure_slate behavior (creates empty future slates) or switch future dates to read-only select.
 

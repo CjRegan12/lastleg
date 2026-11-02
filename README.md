@@ -1,16 +1,16 @@
-# Group Sweat
+# Last Leg
 
-Group Sweat is a live "sweat room" for your group chat. Everyone screenshots their sportsbook slip and drops it in the room. The app reads the slip, matches each leg to tonight's games through the Propfein API, and grades every leg in real time across books. The board sorts itself by who is closest to cashing, a ticker shows every hit and miss as it happens, and a push fires when someone's parlay is one leg away. When the slate goes final there is a recap card to share back to the chat.
+Last Leg is a live "sweat room" for your group chat. Everyone screenshots their sportsbook slip and drops it in the room. The app reads the slip, matches each leg to tonight's games through the Propfein API, and grades every leg in real time across books. The board sorts itself by who is closest to cashing, a ticker shows every hit and miss as it happens, and a push fires when someone's parlay is one leg away. When the slate goes final there is a recap card to share back to the chat.
 
-No bets are placed or taken here and no money moves through the app. There are no pots, entry fees or payouts. "Tail this bet" opens the sportsbook's home page with no affiliate tag. Group Sweat stores no sports data of its own; events, scores and player stats are read from Propfein on demand. The stack is Expo SDK 58 (Expo Router, TypeScript, dev builds) on top of Supabase (Postgres, Auth, Storage, Edge Functions, Realtime Broadcast, pg_cron). iOS only in v1, 21+ gate, responsible gambling footer.
+No bets are placed or taken here and no money moves through the app. There are no pots, entry fees or payouts. "Tail this bet" opens the sportsbook's home page with no affiliate tag. Last Leg stores no sports data of its own; events, scores and player stats are read from Propfein on demand. The stack is Expo SDK 58 (Expo Router, TypeScript, dev builds) on top of Supabase (Postgres, Auth, Storage, Edge Functions, Realtime Broadcast, pg_cron). iOS only in v1, 21+ gate, responsible gambling footer.
 
 ## Setup (Windows)
 
 Prereqs: Node 22.13+, Git, an Expo account (free), an Apple Developer account for device builds. iOS builds run on EAS, so no Mac is needed.
 
 ```powershell
-git clone <repo-url> group-sweat
-cd group-sweat
+git clone <repo-url> lastleg
+cd lastleg
 npm install
 npx expo install --fix        # aligns every native dep to the SDK 58 line
 copy .env.example .env         # then fill in the Supabase URL and publishable key

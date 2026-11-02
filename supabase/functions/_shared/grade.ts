@@ -1,5 +1,5 @@
 /**
- * Pure grading logic for Group Sweat. No I/O, no Supabase, no Deno.
+ * Pure grading logic for Last Leg. No I/O, no Supabase, no Deno.
  *
  * Shared by the Expo app (optimistic display) and the `grade-legs` Edge
  * Function (supabase/functions/_shared/grade.ts is an exact copy of this

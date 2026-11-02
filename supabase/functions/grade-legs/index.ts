@@ -1,5 +1,5 @@
 /**
- * grade-legs: the Group Sweat grader.
+ * grade-legs: the Last Leg grader.
  *
  * Called by pg_cron every 30 seconds (scripts/schedule-grader.sql). Each run:
  *   1. loads every open leg (status pending/live, propfein_event_id set) with its

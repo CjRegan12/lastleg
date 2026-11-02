@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { joinRoomByCode } from "@/lib/rooms";
 
 /**
- * Deep link target: groupsweat://join/CODE and https://groupsweat.app/join/CODE.
+ * Deep link target: lastleg://join/CODE and https://lastleg.io/join/CODE.
  * Lives outside (app) so a signed-out tap can show the code and bounce to sign-in.
  */
 export default function JoinByLinkScreen() {

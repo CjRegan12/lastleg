@@ -1,10 +1,10 @@
-# Group Sweat
+# Last Leg
 
 Live group bet-slip "sweat room": friends drop sportsbook slips, legs are graded in real time across books, pushes fire when a parlay is one leg away. No bets taken, no money held.
 
 ## Rules for any session
 - `DECISIONS.md` is law. Deviate only after asking.
-- Group Sweat stores no sports data. `lib/api/propfein.types.ts` is the Propfein API contract; `PROPFEIN_API_URL=mock` runs everything against fixtures.
+- Last Leg stores no sports data. `lib/api/propfein.types.ts` is the Propfein API contract; `PROPFEIN_API_URL=mock` runs everything against fixtures.
 - Schema changes are migrations in `supabase/migrations/` only. Never edit the dashboard by hand.
 - Secrets never enter the repo. App: EAS env vars / `.env` (gitignored). Functions: `supabase secrets set`.
 - Realtime is Broadcast on private `room:<id>` channels. Never postgres_changes.

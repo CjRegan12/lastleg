@@ -12,7 +12,7 @@ import { formatMoney } from "@/lib/format";
 import { clearPushToken, hasPushPermission, registerForPushAsync } from "@/lib/notifications";
 import { supabase } from "@/lib/supabase";
 
-const PRIVACY_URL = "https://groupsweat.app/privacy"; // placeholder until the site exists
+const PRIVACY_URL = "https://lastleg.io/privacy"; // placeholder until the site exists
 const HOURS = Array.from({ length: 24 }, (_, h) => String(h));
 const HOUR_LABELS = Object.fromEntries(
   HOURS.map((h) => {
@@ -85,7 +85,7 @@ export default function ProfileScreen() {
         setPushOn(false);
         const why =
           res.reason === "denied"
-            ? "Notifications are off for Group Sweat in iOS Settings."
+            ? "Notifications are off for Last Leg in iOS Settings."
             : res.reason === "simulator"
               ? "Push needs a real device."
               : res.reason === "no_project_id"

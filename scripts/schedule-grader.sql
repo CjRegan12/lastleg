@@ -1,4 +1,4 @@
--- Group Sweat: schedule the grade-legs Edge Function with pg_cron + pg_net.
+-- Last Leg: schedule the grade-legs Edge Function with pg_cron + pg_net.
 --
 -- Run this ONCE against the project database (SQL editor or `supabase db query`)
 -- after the first `supabase functions deploy grade-legs`. It is not a migration

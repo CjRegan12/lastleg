@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "Group Sweat",
-    "slug": "group-sweat",
+    "name": "Last Leg",
+    "slug": "lastleg",
     "version": "0.1.0",
     "orientation": "portrait",
-    "scheme": "groupsweat",
+    "scheme": "lastleg",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "backgroundColor": "#0B0F14",
@@ -13,10 +13,10 @@
       "resizeMode": "contain"
     },
     "ios": {
-      "bundleIdentifier": "com.groupsweat.app",
+      "bundleIdentifier": "io.lastleg.app",
       "supportsTablet": false,
       "usesAppleSignIn": true,
-      "associatedDomains": ["applinks:groupsweat.app"],
+      "associatedDomains": ["applinks:lastleg.io"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -34,8 +34,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Group Sweat uses your photo library so you can add a screenshot of your bet slip.",
-          "cameraPermission": "Group Sweat uses the camera so you can snap a photo of a bet slip."
+          "photosPermission": "Last Leg uses your photo library so you can add a screenshot of your bet slip.",
+          "cameraPermission": "Last Leg uses the camera so you can snap a photo of a bet slip."
         }
       ]
     ],

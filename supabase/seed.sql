@@ -1,4 +1,4 @@
--- Group Sweat seed: 2 users, 1 room, 1 slate, 4 slips, 12 legs in mixed states.
+-- Last Leg seed: 2 users, 1 room, 1 slate, 4 slips, 12 legs in mixed states.
 -- Run after migrations on a dev project: `supabase db reset` applies it automatically.
 -- Uses the mock Propfein event ids so the grader in mock mode grades these.
 
