@@ -1,41 +1,59 @@
 /**
- * App entry. Installs a global JS error handler BEFORE Expo Router loads so a
- * fatal error at startup shows its message on screen instead of aborting the
- * process with no UI (React Native's default release behaviour is to throw an
- * NSException from reportFatalException, which is an instant SIGABRT).
+ * App entry.
  *
- * The last fatal is also stored so the next launch can surface it.
+ * Release builds on the new architecture abort the process on any exception
+ * thrown while the bundle is first evaluated (native RCTFatal, before the JS
+ * global error handler can see it). Everything the app imports is loaded
+ * inside the try below, and a failure registers a plain error screen instead,
+ * so the message is readable on the device.
  */
 /* global ErrorUtils */
-const utils = typeof ErrorUtils !== "undefined" ? ErrorUtils : global.ErrorUtils;
-const previous = utils?.getGlobalHandler?.();
+const React = require("react");
+const { AppRegistry, ScrollView, Text, View } = require("react-native");
 
 function describe(error) {
   if (!error) return "Unknown error";
   const msg = error.message || String(error);
-  const stack = error.stack ? String(error.stack).split("\n").slice(0, 6).join("\n") : "";
+  const stack = error.stack ? String(error.stack).split("\n").slice(0, 12).join("\n") : "";
   return stack ? `${msg}\n\n${stack}` : msg;
 }
 
+function registerErrorScreen(title, text) {
+  function StartupError() {
+    return React.createElement(
+      ScrollView,
+      { style: { flex: 1, backgroundColor: "#0B0F14" }, contentContainerStyle: { padding: 24, paddingTop: 80 } },
+      React.createElement(Text, { style: { color: "#F59E0B", fontSize: 18, fontWeight: "700", marginBottom: 12 } }, title),
+      React.createElement(Text, { style: { color: "#E8EEF5", fontSize: 13, fontFamily: "Menlo", lineHeight: 18 } }, text),
+    );
+  }
+  AppRegistry.registerComponent("main", () => StartupError);
+}
+
+// Runtime errors after startup: show instead of abort.
+const utils = typeof ErrorUtils !== "undefined" ? ErrorUtils : global.ErrorUtils;
+const previous = utils?.getGlobalHandler?.();
 if (utils?.setGlobalHandler) {
   utils.setGlobalHandler((error, isFatal) => {
     const text = describe(error);
-    try {
-      // Lazy require: AsyncStorage may itself be the thing that failed.
-      const AsyncStorage = require("@react-native-async-storage/async-storage").default;
-      AsyncStorage.setItem("lastleg:lastFatal", `${new Date().toISOString()}\n${text}`).catch(() => {});
-    } catch {}
     // eslint-disable-next-line no-console
     console.error("[lastleg] global error", isFatal ? "(fatal)" : "", text);
     if (isFatal) {
       try {
         const { Alert } = require("react-native");
-        setTimeout(() => Alert.alert("Last Leg hit an error at startup", text), 0);
+        setTimeout(() => Alert.alert("Last Leg hit an error", text), 0);
       } catch {}
-      return; // swallow: keep the process alive so the message can be read
+      return;
     }
     previous?.(error, isFatal);
   });
 }
 
-require("expo-router/entry");
+// Load-time errors: catch and render.
+try {
+  require("expo-router/entry");
+} catch (error) {
+  // eslint-disable-next-line no-console
+  console.error("[lastleg] failed to load app", error);
+  registerErrorScreen("Last Leg failed to start", describe(error));
+}
