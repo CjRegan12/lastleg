@@ -1,0 +1,48 @@
+{
+  "name": "group-sweat",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
+    "test:grading": "node --experimental-strip-types --test lib/grading/*.test.ts"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "~2.2.0",
+    "@supabase/supabase-js": "^2.58.0",
+    "aes-js": "^3.1.2",
+    "expo": "~58.0.0",
+    "expo-apple-authentication": "~8.0.0",
+    "expo-constants": "~19.0.0",
+    "expo-crypto": "~15.0.0",
+    "expo-dev-client": "~7.0.0",
+    "expo-image-manipulator": "~15.0.0",
+    "expo-image-picker": "~18.0.0",
+    "expo-linking": "~9.0.0",
+    "expo-notifications": "~0.33.0",
+    "expo-router": "~7.0.0",
+    "expo-secure-store": "~16.0.0",
+    "expo-sharing": "~15.0.0",
+    "expo-splash-screen": "~32.0.0",
+    "expo-status-bar": "~4.0.0",
+    "react": "19.2.0",
+    "react-native": "0.88.0",
+    "react-native-gesture-handler": "~2.30.0",
+    "react-native-get-random-values": "~1.11.0",
+    "react-native-reanimated": "~4.2.0",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.19.0",
+    "react-native-url-polyfill": "^2.0.0",
+    "react-native-view-shot": "~4.0.0"
+  },
+  "devDependencies": {
+    "@types/aes-js": "^3.1.4",
+    "@types/node": "^22.13.0",
+    "@types/react": "~19.2.0",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~10.0.0",
+    "typescript": "~5.9.0"
+  }
+}

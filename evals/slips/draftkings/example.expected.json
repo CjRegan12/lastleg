@@ -1,0 +1,27 @@
+{
+  "book": "draftkings",
+  "bet_type": "parlay",
+  "stake": 10,
+  "odds_american": 612,
+  "potential_payout": 71.2,
+  "legs": [
+    {
+      "market": "spread",
+      "line": -3.5,
+      "player_name": null,
+      "selection": "Eagles -3.5"
+    },
+    {
+      "market": "total",
+      "line": 47.5,
+      "player_name": null,
+      "selection": "Over 47.5"
+    },
+    {
+      "market": "player_prop",
+      "line": 249.5,
+      "player_name": "Josh Allen",
+      "selection": "Josh Allen 250+ Passing Yds"
+    }
+  ]
+}

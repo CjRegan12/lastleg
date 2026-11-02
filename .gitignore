@@ -1,0 +1,29 @@
+# deps
+node_modules/
+
+# expo
+.expo/
+dist/
+web-build/
+
+# native (prebuild output; CNG regenerates it)
+ios/
+android/
+
+# env
+.env*
+!.env.example
+
+# supabase
+supabase/.temp/
+supabase/.branches/
+
+# misc
+.DS_Store
+*.log
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision

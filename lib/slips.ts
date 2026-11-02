@@ -1,0 +1,271 @@
+import { randomUUID } from "expo-crypto";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import * as ImagePicker from "expo-image-picker";
+
+import type { Enums, Inserts, Json } from "@/lib/database.types";
+import { supabase } from "@/lib/supabase";
+
+// ---------------------------------------------------------------------------
+// Types. Must stay in sync with supabase/functions/parse-slip/schema.ts plus
+// the match block the function attaches per leg after calling Propfein.
+// ---------------------------------------------------------------------------
+
+export type Book = Enums<"sportsbook">;
+export type BetType = Enums<"bet_type">;
+export type SlipSport = Enums<"sport">;
+export type SlipMarket = Enums<"market">;
+
+export interface LegMatch {
+  event_id: string;
+  market_key: string;
+  player_id: string | null;
+  team_id: string | null;
+  side: "home" | "away" | "over" | "under" | null;
+  confidence: number;
+}
+
+export interface ParsedLeg {
+  sport: SlipSport;
+  market: SlipMarket;
+  selection: string;
+  line: number | null;
+  player_name: string | null;
+  stat_type: string | null;
+  teams: string[];
+  event_date_hint: string | null;
+  leg_odds_american: number | null;
+  confidence: number;
+  match: LegMatch | null;
+}
+
+export interface ParsedSlip {
+  book: Book;
+  bet_type: BetType;
+  stake: number;
+  odds_american: number;
+  potential_payout: number;
+  legs: ParsedLeg[];
+  overall_confidence: number;
+}
+
+export const LOW_CONFIDENCE = 0.8;
+
+// ---------------------------------------------------------------------------
+// Image: pick, downscale to 1568px long edge (keeps Haiku at ~1,450 tokens).
+// ---------------------------------------------------------------------------
+
+export const MAX_LONG_EDGE = 1568;
+
+export interface PreparedImage {
+  uri: string;
+  width: number;
+  height: number;
+}
+
+/** Returns null when the user cancels. */
+export async function pickAndPrepareImage(
+  source: "library" | "camera" = "library",
+): Promise<PreparedImage | null> {
+  const common: ImagePicker.ImagePickerOptions = {
+    mediaTypes: ["images"],
+    allowsEditing: false,
+    quality: 1,
+    exif: false,
+  };
+  let result: ImagePicker.ImagePickerResult;
+  if (source === "camera") {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) throw new Error("Camera permission denied");
+    result = await ImagePicker.launchCameraAsync(common);
+  } else {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) throw new Error("Photo library permission denied");
+    result = await ImagePicker.launchImageLibraryAsync(common);
+  }
+  if (result.canceled || !result.assets[0]) return null;
+  const asset = result.assets[0];
+  return downscale(asset.uri, asset.width, asset.height);
+}
+
+export async function downscale(uri: string, width: number, height: number): Promise<PreparedImage> {
+  const longEdge = Math.max(width, height);
+  const scale = longEdge > MAX_LONG_EDGE ? MAX_LONG_EDGE / longEdge : 1;
+  const target = {
+    width: Math.round(width * scale),
+    height: Math.round(height * scale),
+  };
+  const ctx = ImageManipulator.manipulate(uri);
+  if (scale < 1) ctx.resize(target);
+  const rendered = await ctx.renderAsync();
+  const saved = await rendered.saveAsync({ compress: 0.85, format: SaveFormat.JPEG });
+  rendered.release();
+  return { uri: saved.uri, width: saved.width, height: saved.height };
+}
+
+// ---------------------------------------------------------------------------
+// Storage: private bucket `slips`, path `<user_id>/<uuid>.jpg`
+// ---------------------------------------------------------------------------
+
+export async function uploadSlipImage(userId: string, localUri: string): Promise<string> {
+  const res = await fetch(localUri);
+  const buf = await res.arrayBuffer();
+  const path = `${userId}/${randomUUID()}.jpg`;
+  const { error } = await supabase.storage.from("slips").upload(path, buf, {
+    contentType: "image/jpeg",
+    upsert: false,
+  });
+  if (error) throw error;
+  return path;
+}
+
+// ---------------------------------------------------------------------------
+// Parse: Edge Function `parse-slip`
+// ---------------------------------------------------------------------------
+
+export async function callParseSlip(storagePath: string, roomId: string): Promise<ParsedSlip> {
+  const { data, error } = await supabase.functions.invoke<ParsedSlip>("parse-slip", {
+    body: { storage_path: storagePath, room_id: roomId },
+  });
+  if (error) throw error;
+  if (!data || !Array.isArray(data.legs)) throw new Error("parse-slip returned an unexpected shape");
+  return data;
+}
+
+// ---------------------------------------------------------------------------
+// Save: slip + legs (+ parse_corrections for anything the user changed)
+// ---------------------------------------------------------------------------
+
+export interface SaveSlipInput {
+  userId: string;
+  roomId: string;
+  screenshotPath: string;
+  /** What parse-slip returned, untouched. */
+  parsed: ParsedSlip;
+  /** What the user confirmed. */
+  confirmed: ParsedSlip;
+  /** Defaults to today's slate (ensure_slate's default). */
+  slateDate?: string;
+}
+
+export async function saveSlip(input: SaveSlipInput): Promise<string> {
+  const { userId, roomId, screenshotPath, parsed, confirmed } = input;
+
+  const slateArgs: { p_room_id: string; p_date?: string } = { p_room_id: roomId };
+  if (input.slateDate) slateArgs.p_date = input.slateDate;
+  const { data: slate, error: slateErr } = await supabase.rpc("ensure_slate", slateArgs);
+  if (slateErr) throw slateErr;
+
+  const slipInsert: Inserts<"slips"> = {
+    user_id: userId,
+    room_id: roomId,
+    slate_id: slate.id,
+    book: confirmed.book,
+    bet_type: confirmed.bet_type,
+    stake: confirmed.stake,
+    odds_american: confirmed.odds_american,
+    potential_payout: confirmed.potential_payout,
+    legs_total: confirmed.legs.length,
+    legs_remaining: confirmed.legs.length,
+    screenshot_path: screenshotPath,
+    parsed_json: parsed as unknown as Json,
+    parse_confidence: clamp01(parsed.overall_confidence),
+  };
+  const { data: slip, error: slipErr } = await supabase
+    .from("slips")
+    .insert(slipInsert)
+    .select("id")
+    .single();
+  if (slipErr) throw slipErr;
+
+  const legInserts: Inserts<"legs">[] = confirmed.legs.map((leg) => ({
+    slip_id: slip.id,
+    room_id: roomId,
+    sport: leg.sport,
+    market: leg.market,
+    selection: leg.selection,
+    line: leg.line,
+    player_name: leg.player_name,
+    stat_type: leg.stat_type,
+    teams: leg.teams,
+    leg_odds_american: leg.leg_odds_american,
+    status: leg.match ? "pending" : "needs_review",
+    propfein_event_id: leg.match?.event_id ?? null,
+    propfein_market_key: leg.match?.market_key ?? null,
+    propfein_player_id: leg.match?.player_id ?? null,
+    side: leg.match?.side ?? null,
+    match_confidence: leg.match ? clamp01(leg.match.confidence) : null,
+  }));
+  if (legInserts.length > 0) {
+    const { error: legsErr } = await supabase.from("legs").insert(legInserts);
+    if (legsErr) throw legsErr;
+  }
+
+  const corrections = diffCorrections(parsed, confirmed).map((c) => ({
+    slip_id: slip.id,
+    user_id: userId,
+    field_path: c.field_path,
+    parsed_value: c.parsed_value,
+    corrected_value: c.corrected_value,
+  }));
+  if (corrections.length > 0) {
+    // learning data only; never block the save on it
+    await supabase.from("parse_corrections").insert(corrections);
+  }
+
+  return slip.id;
+}
+
+interface Correction {
+  field_path: string;
+  parsed_value: Json;
+  corrected_value: Json;
+}
+
+const SLIP_FIELDS = ["book", "bet_type", "stake", "odds_american", "potential_payout"] as const;
+const LEG_FIELDS = [
+  "sport",
+  "market",
+  "selection",
+  "line",
+  "player_name",
+  "stat_type",
+  "leg_odds_american",
+] as const;
+
+/** Field-level diff between the model output and what the user submitted. */
+export function diffCorrections(parsed: ParsedSlip, confirmed: ParsedSlip): Correction[] {
+  const out: Correction[] = [];
+  for (const f of SLIP_FIELDS) {
+    if (parsed[f] !== confirmed[f]) {
+      out.push({ field_path: f, parsed_value: parsed[f], corrected_value: confirmed[f] });
+    }
+  }
+  const n = Math.max(parsed.legs.length, confirmed.legs.length);
+  for (let i = 0; i < n; i++) {
+    const a = parsed.legs[i];
+    const b = confirmed.legs[i];
+    if (!a || !b) {
+      out.push({
+        field_path: `legs[${i}]`,
+        parsed_value: a ? (a as unknown as Json) : null,
+        corrected_value: b ? (b as unknown as Json) : null,
+      });
+      continue;
+    }
+    for (const f of LEG_FIELDS) {
+      if (a[f] !== b[f]) {
+        out.push({
+          field_path: `legs[${i}].${f}`,
+          parsed_value: a[f],
+          corrected_value: b[f],
+        });
+      }
+    }
+  }
+  return out;
+}
+
+function clamp01(n: number): number {
+  if (Number.isNaN(n)) return 0;
+  return Math.min(1, Math.max(0, Math.round(n * 100) / 100));
+}

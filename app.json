@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Group Sweat",
+    "slug": "group-sweat",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "groupsweat",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "backgroundColor": "#0B0F14",
+    "splash": {
+      "backgroundColor": "#0B0F14",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "bundleIdentifier": "com.groupsweat.app",
+      "supportsTablet": false,
+      "usesAppleSignIn": true,
+      "associatedDomains": ["applinks:groupsweat.app"],
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-apple-authentication",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#3B82F6"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Group Sweat uses your photo library so you can add a screenshot of your bet slip.",
+          "cameraPermission": "Group Sweat uses the camera so you can snap a photo of a bet slip."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
+    }
+  }
+}

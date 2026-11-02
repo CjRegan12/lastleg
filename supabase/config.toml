@@ -1,0 +1,58 @@
+# Supabase CLI config for Group Sweat.
+# Generated shape matches `supabase init`; only the values we care about are set.
+project_id = "group-sweat"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 17
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323
+
+[storage]
+enabled = true
+file_size_limit = "10MiB"
+
+[auth]
+enabled = true
+site_url = "groupsweat://"
+additional_redirect_urls = ["groupsweat://", "https://groupsweat.app"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+enable_signup = true
+
+[auth.sms]
+enable_signup = true
+enable_confirmations = true
+
+[auth.external.apple]
+enabled = true
+client_id = "env(APPLE_CLIENT_ID)"
+secret = "env(APPLE_SECRET)"
+
+[functions.parse-slip]
+verify_jwt = true
+
+[functions.grade-legs]
+verify_jwt = false
+
+[functions.send-push]
+verify_jwt = false
+
+[functions.check-receipts]
+verify_jwt = false
