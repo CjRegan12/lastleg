@@ -100,7 +100,7 @@ export default function YouScreen() {
         }
         renderItem={({ item }) => <FeedSlipCard slip={item} lead="room" compact />}
         ListEmptyComponent={
-          loading ? null : (
+          loading ? undefined : (
             <EmptyState
               title={period === "all" ? "No settled slips yet" : `Nothing settled ${PERIOD_LABELS[period].toLowerCase()}`}
               body="Once a slip grades out it lands here with your running record."

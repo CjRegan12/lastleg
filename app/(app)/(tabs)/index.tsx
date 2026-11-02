@@ -70,7 +70,7 @@ export default function LiveScreen() {
         )}
         renderItem={({ item }) => <FeedSlipCard slip={item} lead="room" />}
         ListEmptyComponent={
-          loading ? null : (
+          loading ? undefined : (
             <EmptyState
               title="Nothing sweating"
               body="Drop a slip and it shows up here the second a game goes live."

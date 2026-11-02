@@ -141,13 +141,13 @@ export default function CommunityScreen() {
         }
         renderItem={({ item }) => <FeedSlipCard slip={item} lead="owner" compact />}
         ListEmptyComponent={
-          loading ? null : thin ? (
+          loading ? undefined : thin ? (
             <EmptyState
               title="Your community is your rooms"
               body="Get two more friends into a room and the leaderboard turns on. Everyone you share a room with shows up here."
               action={<Button title="Go to rooms" variant="secondary" onPress={() => router.push("/rooms" as never)} />}
             />
-          ) : null
+          ) : undefined
         }
       />
     </Screen>
