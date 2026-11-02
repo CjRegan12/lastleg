@@ -226,12 +226,21 @@ export default function SlipDetailScreen() {
               {leg.line != null ? ` · line ${formatLine(leg.line, leg.market)}` : ""}
               {leg.leg_odds_american != null ? ` · ${formatOdds(leg.leg_odds_american)}` : ""}
             </Text>
-            {/* Live/final context comes from the leg row itself (the grader writes
-                current_value); the app never talks to Propfein directly. */}
+            {/* Event context comes from the leg row itself: `teams` from the parse and
+                current_value from the grader. The app never talks to Propfein directly. */}
+            {leg.teams && leg.teams.length > 0 ? (
+              <Text style={styles.teams}>{leg.teams.join(" vs ")}</Text>
+            ) : null}
             {leg.current_value != null && leg.line != null && leg.status !== "pending" ? (
               <Text style={[styles.progress, { color: c }]}>
-                {formatLine(leg.current_value, leg.market)} / {formatLine(leg.line, leg.market)}
+                {leg.status === "live" ? "Now " : ""}
+                {formatLine(leg.current_value, leg.market)}
+                {leg.market === "spread" ? " margin" : ""} · line {formatLine(leg.line, leg.market)}
                 {leg.side ? ` (${leg.side})` : ""}
+              </Text>
+            ) : leg.current_value != null && leg.status !== "pending" ? (
+              <Text style={[styles.progress, { color: c }]}>
+                {leg.status === "live" ? "Now " : ""}margin {formatLine(leg.current_value, "spread")}
               </Text>
             ) : null}
             {leg.status === "pending" ? (
@@ -313,6 +322,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.85 },
   legSelection: { color: colors.text, fontSize: fontSize.md, fontWeight: "600", flex: 1, marginRight: spacing.sm },
   legMeta: { color: colors.muted, fontSize: fontSize.sm, marginTop: spacing.xs },
+  teams: { color: colors.text, fontSize: fontSize.sm, marginTop: spacing.xs, opacity: 0.8 },
   progress: { fontSize: fontSize.md, fontWeight: "800", marginTop: spacing.sm, fontVariant: ["tabular-nums"] },
   event: { color: colors.muted, fontSize: fontSize.sm, marginTop: spacing.xs },
   warn: { color: colors.oneAway, fontSize: fontSize.sm, marginTop: spacing.xs },

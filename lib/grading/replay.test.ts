@@ -144,12 +144,12 @@ describe("replay: 3-leg parlay across six snapshots", () => {
 
   it("slip status and legs_remaining follow the rollup", () => {
     assert.deepEqual(slipTimeline, [
-      { status: "pending", legs_remaining: 3 },
-      { status: "live", legs_remaining: 3 },
-      { status: "live", legs_remaining: 3 },
-      { status: "live", legs_remaining: 1 },
-      { status: "live", legs_remaining: 1 },
-      { status: "won", legs_remaining: 0 },
+      { status: "pending", legs_remaining: 3, legs_total: 3 },
+      { status: "live", legs_remaining: 3, legs_total: 3 },
+      { status: "live", legs_remaining: 3, legs_total: 3 },
+      { status: "live", legs_remaining: 1, legs_total: 3 },
+      { status: "live", legs_remaining: 1, legs_total: 3 },
+      { status: "won", legs_remaining: 0, legs_total: 3 },
     ]);
   });
 

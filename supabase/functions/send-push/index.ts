@@ -20,7 +20,8 @@
  * claimed first is skipped. After Expo answers, the row gets its ticket id and
  * expo_receipt_status goes back to null (receipt pending) or to the Expo error code.
  * If the Expo POST itself fails, the claim is released (sent_at back to null) so a
- * later drain retries it.
+ * later drain retries it. A drain also starts by releasing any row still 'claimed'
+ * more than 10 minutes after its claim (an invocation that died mid-send).
  *
  * Per row: look up profiles.push_token. No token -> expo_receipt_status 'no_token'
  * (sent_at stays set from the claim). A ticket error of DeviceNotRegistered nulls
@@ -50,6 +51,8 @@ interface NotificationRow {
 }
 
 const CLAIMED = "claimed";
+/** A row still 'claimed' this long after its claim belongs to a dead invocation; a drain reclaims it. */
+const STALE_CLAIM_MINUTES = 10;
 const NOTIFICATION_COLUMNS = "id, user_id, title, body, url, sent_at";
 
 interface WebhookPayload {
@@ -77,6 +80,8 @@ interface ExpoTicket {
 interface Summary {
   mode: "webhook" | "drain";
   considered: number;
+  /** drain only: stale 'claimed' rows released back to unsent before selecting candidates */
+  reclaimed: number;
   claimed: number;
   sent: number;
   no_token: number;
@@ -153,6 +158,7 @@ Deno.serve(async (req: Request) => {
   const summary: Summary = {
     mode: "drain",
     considered: 0,
+    reclaimed: 0,
     claimed: 0,
     sent: 0,
     no_token: 0,
@@ -168,6 +174,19 @@ Deno.serve(async (req: Request) => {
       summary.mode = "webhook";
       candidateIds = [payload.record.id];
     } else {
+      // Reclaim stale claims first: an invocation that died between the claim
+      // and the Expo answer leaves rows stuck at 'claimed' forever. Anything
+      // claimed more than STALE_CLAIM_MINUTES ago goes back to unsent.
+      const staleBefore = new Date(Date.now() - STALE_CLAIM_MINUTES * 60_000).toISOString();
+      const { data: reclaimed, error: reclaimErr } = await admin
+        .from("notifications")
+        .update({ sent_at: null, expo_receipt_status: null })
+        .eq("expo_receipt_status", CLAIMED)
+        .lt("sent_at", staleBefore)
+        .select("id");
+      if (reclaimErr) throw new Error(`reclaim stale: ${reclaimErr.message}`);
+      summary.reclaimed = (reclaimed ?? []).length;
+
       const { data, error } = await admin
         .from("notifications")
         .select("id")

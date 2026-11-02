@@ -123,13 +123,13 @@ export function normalizePhone(raw: string): string {
   return `+${digits}`;
 }
 
-/** Stamp profiles.age_confirmed_at once after the first sign-in. */
+/**
+ * Stamp profiles.age_confirmed_at once after the first sign-in. The read goes
+ * through `me` (the only view that exposes the private columns); the write goes
+ * to `profiles`, which the owner may update for this column.
+ */
 export async function confirmAge(userId: string): Promise<void> {
-  const { data } = await supabase
-    .from("profiles")
-    .select("age_confirmed_at")
-    .eq("id", userId)
-    .maybeSingle();
+  const { data } = await supabase.from("me").select("age_confirmed_at").maybeSingle();
   if (data?.age_confirmed_at) return;
   await supabase
     .from("profiles")

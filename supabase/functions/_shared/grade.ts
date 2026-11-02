@@ -43,6 +43,8 @@ export type SlipRollupStatus = "pending" | "live" | "won" | "lost" | "void";
 export interface SlipRollup {
   status: SlipRollupStatus;
   legs_remaining: number;
+  /** Total legs on the slip. Needed so one_away never fires for a single bet. */
+  legs_total: number;
 }
 
 /** Feed events the grader can emit. Subset of the `room_event_type` enum. */
@@ -220,7 +222,7 @@ export function rollupSlip(legStatuses: string[]): SlipRollup {
   else if (voided === total && total > 0) status = "void";
   else status = "pending";
 
-  return { status, legs_remaining: open };
+  return { status, legs_remaining: open, legs_total: total };
 }
 
 // ---------------------------------------------------------------------------
@@ -252,12 +254,17 @@ export function detectTransitions(
   if (slipChanged && nextSlip.status === "lost") out.push("slip_dead");
   if (slipChanged && nextSlip.status === "won") out.push("cashed");
 
-  // one_away: the slip is still open (pending or live) and either
+  // one_away: the slip is a parlay (legs_total > 1; a single bet is never
+  // "one away"), is still open (pending or live) and either
   //  a) legs_remaining just dropped from >1 to exactly 1, or
   //  b) legs_remaining was already 1 and the slip went pending -> live
   //     (the last leg's game just kicked off).
+  // (b) can re-fire after (a) when the last leg's game starts later than the
+  // others settled. The grader dedupes: notifications via the unique
+  // (user_id, slip_id, type) index, room_events by checking for an existing
+  // one_away row for the slip before inserting.
   const stillOpen = nextSlip.status === "pending" || nextSlip.status === "live";
-  if (stillOpen && nextSlip.legs_remaining === 1) {
+  if (stillOpen && nextSlip.legs_total > 1 && nextSlip.legs_remaining === 1) {
     const droppedToOne = prevSlip.legs_remaining > 1;
     const lastLegWentLive =
       prevSlip.legs_remaining === 1 && prevSlip.status === "pending" && nextSlip.status === "live";

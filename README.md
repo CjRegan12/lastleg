@@ -40,8 +40,9 @@ Push env vars to EAS for cloud builds so they are never in the repo:
 ```powershell
 eas env:create --name EXPO_PUBLIC_SUPABASE_URL --value https://xxx.supabase.co --environment development
 eas env:create --name EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY --value sb_publishable_xxx --environment development
-eas env:create --name EXPO_PUBLIC_PROPFEIN_API_URL --value mock --environment development
 ```
+
+The app never talks to Propfein directly and holds no Propfein key. Only the Edge Functions do, through `PROPFEIN_API_URL` (set with `supabase secrets set`); for local dev and the mock seed, set `PROPFEIN_API_URL=mock` together with `ALLOW_MOCK_PROPFEIN=true` in `supabase/functions/.env.local`.
 
 ## Supabase
 

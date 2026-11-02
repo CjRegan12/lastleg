@@ -1,10 +1,11 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SlipCard } from "@/components/SlipCard";
 import { Ticker } from "@/components/Ticker";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Screen } from "@/components/ui/Screen";
@@ -13,6 +14,38 @@ import { useRoom } from "@/hooks/useRoom";
 import { useSlateBoard } from "@/hooks/useSlateBoard";
 import { formatMoney, formatSlateDate, shiftDate, todayNY } from "@/lib/format";
 import { shareInvite } from "@/lib/rooms";
+import { SLATE_FUTURE_DAYS } from "@/lib/slips";
+import { supabase } from "@/lib/supabase";
+
+interface UpcomingSlate {
+  id: string;
+  slate_date: string;
+  slipCount: number;
+}
+
+/** This room's future slates that already have slips on them (future-dated slips land there). */
+function useUpcomingSlates(roomId: string | null | undefined, today: string, enabled: boolean) {
+  const [rows, setRows] = useState<UpcomingSlate[]>([]);
+  const load = useCallback(async () => {
+    if (!roomId || !enabled) {
+      setRows([]);
+      return;
+    }
+    const { data } = await supabase
+      .from("slates")
+      .select("id, slate_date, slips(count)")
+      .eq("room_id", roomId)
+      .gt("slate_date", today)
+      .order("slate_date", { ascending: true });
+    const next: UpcomingSlate[] = [];
+    for (const r of (data ?? []) as unknown as { id: string; slate_date: string; slips: { count: number }[] }[]) {
+      const count = r.slips?.[0]?.count ?? 0;
+      if (count > 0) next.push({ id: r.id, slate_date: r.slate_date, slipCount: count });
+    }
+    setRows(next);
+  }, [roomId, today, enabled]);
+  return { upcoming: rows, reloadUpcoming: load };
+}
 
 export default function RoomBoardScreen() {
   const { id: roomId } = useLocalSearchParams<{ id: string }>();
@@ -27,7 +60,14 @@ export default function RoomBoardScreen() {
   );
 
   const isToday = slateDate === today;
-  const canGoForward = slateDate < today;
+  const isUpcoming = slateDate > today;
+  // Slips can be dated up to SLATE_FUTURE_DAYS ahead (see slateDateFor), so the board can browse that far.
+  const canGoForward = slateDate < shiftDate(today, SLATE_FUTURE_DAYS);
+  const { upcoming, reloadUpcoming } = useUpcomingSlates(roomId, today, isToday);
+  useEffect(() => {
+    // runs on mount and whenever today's slip list changes (a new slip may have landed on a future slate too)
+    reloadUpcoming();
+  }, [slips.length, reloadUpcoming]);
 
   return (
     <Screen edges={["bottom"]} padded={false}>
@@ -48,7 +88,10 @@ export default function RoomBoardScreen() {
           <Text style={styles.chevText}>‹</Text>
         </Pressable>
         <Pressable onPress={() => setSlateDate(today)} style={styles.slateLabelWrap}>
-          <Text style={styles.slateLabel}>{isToday ? "Today" : formatSlateDate(slateDate)}</Text>
+          <View style={styles.slateTitleRow}>
+            <Text style={styles.slateLabel}>{isToday ? "Today" : formatSlateDate(slateDate)}</Text>
+            {isUpcoming ? <Badge label="Upcoming" color={colors.pending} style={styles.upcomingChip} /> : null}
+          </View>
           {slate ? <Text style={styles.slateStatus}>{slate.status.toUpperCase()}</Text> : null}
         </Pressable>
         <Pressable
@@ -95,14 +138,33 @@ export default function RoomBoardScreen() {
           )
         }
         ListFooterComponent={
-          slate && slate.status === "final" && roomId ? (
-            <Button
-              title="View recap"
-              variant="secondary"
-              onPress={() => router.push(`/rooms/${roomId}/recap/${slate.id}` as never)}
-              style={styles.recap}
-            />
-          ) : null
+          <>
+            {slate && slate.status === "final" && roomId ? (
+              <Button
+                title="View recap"
+                variant="secondary"
+                onPress={() => router.push(`/rooms/${roomId}/recap/${slate.id}` as never)}
+                style={styles.recap}
+              />
+            ) : null}
+            {isToday && upcoming.length > 0 ? (
+              <View style={styles.upcoming}>
+                <Text style={styles.upcomingTitle}>Upcoming</Text>
+                {upcoming.map((u) => (
+                  <Pressable
+                    key={u.id}
+                    onPress={() => setSlateDate(u.slate_date)}
+                    style={({ pressed }) => [styles.upcomingRow, pressed && styles.upcomingPressed]}
+                  >
+                    <Text style={styles.upcomingDate}>{formatSlateDate(u.slate_date)}</Text>
+                    <Text style={styles.upcomingCount}>
+                      {u.slipCount} {u.slipCount === 1 ? "slip" : "slips"} ›
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+          </>
         }
         renderItem={({ item }) =>
           roomId ? <SlipCard slip={item} legs={legsBySlip[item.id ?? ""] ?? []} roomId={roomId} /> : null
@@ -153,6 +215,8 @@ const styles = StyleSheet.create({
   chevOff: { opacity: 0.25 },
   chevText: { color: colors.text, fontSize: 28, lineHeight: 30 },
   slateLabelWrap: { alignItems: "center" },
+  slateTitleRow: { flexDirection: "row", alignItems: "center" },
+  upcomingChip: { marginLeft: spacing.sm },
   slateLabel: { color: colors.text, fontSize: fontSize.lg, fontWeight: "700" },
   slateStatus: { color: colors.muted, fontSize: fontSize.xs, letterSpacing: 1, marginTop: 2 },
   list: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
@@ -171,6 +235,29 @@ const styles = StyleSheet.create({
   statLabel: { color: colors.muted, fontSize: fontSize.xs, marginTop: 2 },
   error: { color: colors.lost, fontSize: fontSize.sm, width: "100%", paddingHorizontal: spacing.md, paddingTop: spacing.sm },
   recap: { marginTop: spacing.md },
+  upcoming: { marginTop: spacing.lg },
+  upcomingTitle: {
+    color: colors.muted,
+    fontSize: fontSize.xs,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: spacing.xs,
+  },
+  upcomingRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.xs,
+  },
+  upcomingPressed: { opacity: 0.85 },
+  upcomingDate: { color: colors.text, fontSize: fontSize.sm, fontWeight: "600" },
+  upcomingCount: { color: colors.muted, fontSize: fontSize.sm },
   fab: {
     position: "absolute",
     right: spacing.lg,

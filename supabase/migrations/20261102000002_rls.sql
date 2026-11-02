@@ -56,6 +56,12 @@ with (security_invoker = false)
 as select * from profiles where id = auth.uid();
 revoke all on public.me from public, anon;
 grant select on public.me to authenticated;
+-- A security_definer view over a single table is auto-updatable in Postgres:
+-- writes through it would run as the view owner and bypass both RLS and the
+-- profiles column grants (premium_until, for one). Strip every write privilege
+-- so `me` is strictly read-only. UPDATEs go to `profiles` directly.
+revoke insert, update, delete, truncate, references, trigger on public.me
+  from authenticated, anon, public;
 
 -- ---------- rooms ----------
 create policy "rooms: members read"
@@ -97,6 +103,107 @@ create policy "slips: owner updates own pending slip"
 create policy "slips: delete own while pending"
   on slips for delete to authenticated
   using (user_id = auth.uid() and status = 'pending');
+-- Client inserts cannot pick their own status or grading columns, and the slate
+-- they point at must belong to the same room and still be gradeable. The legs
+-- insert (and rollup_slip) sets legs_total/legs_remaining afterwards.
+-- Service role (grader, parser) and postgres (migrations, seed, tests) are trusted.
+create or replace function slips_before_insert_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  claims text := nullif(current_setting('request.jwt.claims', true), '');
+  jwt_role text;
+  sl slates;
+begin
+  jwt_role := case when claims is null then null else claims::jsonb->>'role' end;
+  -- null role = no JWT (postgres/migrations/seed); service_role = trusted backend
+  if jwt_role is null or jwt_role = 'service_role' then
+    return new;
+  end if;
+
+  select * into sl from slates where id = new.slate_id;
+  if sl.id is null then
+    raise exception 'slate % not found', new.slate_id using errcode = 'P0002';
+  end if;
+  if sl.room_id is distinct from new.room_id then
+    raise exception 'slate belongs to another room' using errcode = '42501';
+  end if;
+  if sl.status = 'final' then
+    raise exception 'cannot add a slip to a final slate' using errcode = '42501';
+  end if;
+
+  new.status := 'pending'::slip_status;
+  new.legs_total := 0;
+  new.legs_remaining := 0;
+  new.settled_at := null;
+  return new;
+end;
+$$;
+create trigger slips_before_insert_guard
+  before insert on slips
+  for each row execute function slips_before_insert_guard();
+
+-- Because the guard zeroes legs_total/legs_remaining on client inserts, keep
+-- them in sync as legs are added or removed. Same math as rollup_slip for those
+-- two columns; status stays the grader's. Statement-level so a multi-row legs
+-- insert updates each slip (and fires slips_broadcast) once.
+create or replace function slips_sync_leg_counts(p_slip_ids uuid[])
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update slips s
+     set legs_total = c.n_total,
+         legs_remaining = c.n_open
+    from (
+      select sl.id,
+             count(l.id)::int as n_total,
+             count(l.id) filter (where l.status in ('pending', 'live', 'needs_review'))::int as n_open
+        from slips sl
+        left join legs l on l.slip_id = sl.id
+       where sl.id = any (p_slip_ids)
+       group by sl.id
+    ) c
+   where s.id = c.id
+     and (s.legs_total <> c.n_total or s.legs_remaining <> c.n_open);
+$$;
+revoke execute on function slips_sync_leg_counts(uuid[]) from public, anon, authenticated;
+
+create or replace function legs_after_insert_sync()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform slips_sync_leg_counts((select array_agg(distinct slip_id) from new_legs));
+  return null;
+end;
+$$;
+create trigger legs_after_insert_sync
+  after insert on legs
+  referencing new table as new_legs
+  for each statement execute function legs_after_insert_sync();
+
+create or replace function legs_after_delete_sync()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform slips_sync_leg_counts((select array_agg(distinct slip_id) from old_legs));
+  return null;
+end;
+$$;
+create trigger legs_after_delete_sync
+  after delete on legs
+  referencing old table as old_legs
+  for each statement execute function legs_after_delete_sync();
 
 -- ---------- legs ----------
 create policy "legs: members read"

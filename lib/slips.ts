@@ -3,7 +3,7 @@ import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 
 import type { Enums, Inserts, Json } from "@/lib/database.types";
-import { todayNY } from "@/lib/format";
+import { shiftDate, todayNY } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 
 // ---------------------------------------------------------------------------
@@ -168,19 +168,31 @@ export interface SaveSlipInput {
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** How far a slip may be dated relative to today (NY). Matches the room board's forward navigation. */
+export const SLATE_PAST_DAYS = 1;
+export const SLATE_FUTURE_DAYS = 10;
+
 /**
  * Slate for a slip is the date of its games, not the day it was uploaded: a slip
  * dropped Tuesday for Thursday night football belongs on Thursday's board.
- * Earliest valid event_date_hint wins; no hints -> today in New York.
+ * Earliest valid event_date_hint wins, clamped to [today-1, today+10] in New
+ * York; a hint outside that window (misread year, stale screenshot) falls back
+ * to today. No hints -> today. ParsedLeg.match carries no start_time, so the
+ * printed date hint is the only signal we have here.
  */
 export function slateDateFor(legs: Pick<ParsedLeg, "event_date_hint">[], now: Date = new Date()): string {
+  const today = todayNY(now);
+  const min = shiftDate(today, -SLATE_PAST_DAYS);
+  const max = shiftDate(today, SLATE_FUTURE_DAYS);
   let earliest: string | null = null;
   for (const leg of legs) {
     const d = leg.event_date_hint;
     if (!d || !YMD_RE.test(d)) continue;
     if (earliest === null || d < earliest) earliest = d;
   }
-  return earliest ?? todayNY(now);
+  if (earliest === null) return today;
+  if (earliest < min || earliest > max) return today;
+  return earliest;
 }
 
 export async function saveSlip(input: SaveSlipInput): Promise<string> {
@@ -201,8 +213,8 @@ export async function saveSlip(input: SaveSlipInput): Promise<string> {
     stake: confirmed.stake,
     odds_american: confirmed.odds_american,
     potential_payout: confirmed.potential_payout,
-    legs_total: confirmed.legs.length,
-    legs_remaining: confirmed.legs.length,
+    // status/legs_total/legs_remaining are set server side: slips_before_insert_guard
+    // zeroes them and the legs insert trigger recomputes the counts.
     screenshot_path: screenshotPath,
     parsed_json: parsed as unknown as Json,
     parse_confidence: clamp01(parsed.overall_confidence),

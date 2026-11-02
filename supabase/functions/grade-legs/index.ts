@@ -153,6 +153,8 @@ interface RunSummary {
   legs_raced: number;
   slips_rolled: number;
   events: number;
+  events_fetched_by_id: number;
+  one_away_deduped: number;
   notifications: number;
   notifications_deduped: number;
   slates_finalized: number;
@@ -245,6 +247,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     legs_raced: 0,
     slips_rolled: 0,
     events: 0,
+    events_fetched_by_id: 0,
+    one_away_deduped: 0,
     notifications: 0,
     notifications_deduped: 0,
     slates_finalized: 0,
@@ -301,6 +305,16 @@ async function run(db: Db, propfein: PropfeinClient, summary: RunSummary): Promi
     .filter((d) => d >= yesterday && d <= horizon)
     .sort();
   const events = dates.length > 0 ? await fetchEvents(propfein, dates, summary) : new Map<string, PropfeinEvent>();
+
+  // Legs whose event is not on their slate's date (a Tuesday slip with a Thursday
+  // game, a slate date the parser got wrong) miss the list fetch. Fetch those
+  // events individually so they still grade. The date-window list stays the fast path.
+  const missingEventIds = unique(
+    legs
+      .filter((l) => l.propfein_event_id && !events.has(l.propfein_event_id))
+      .map((l) => l.propfein_event_id as string),
+  );
+  await fetchMissingEvents(propfein, events, missingEventIds, summary);
 
   // player props need player_stats, which only GET /v1/events/{id} carries
   const propEventIds = unique(
@@ -373,6 +387,13 @@ async function run(db: Db, propfein: PropfeinClient, summary: RunSummary): Promi
   await advanceSlates(db, activeSlates, today, now, summary);
 }
 
+/** True when a feed event of this type already exists for the slip. */
+async function hasRoomEvent(db: Db, slipId: string, type: GradeRoomEventType): Promise<boolean> {
+  const { data, error } = await db.from("room_events").select("id").eq("slip_id", slipId).eq("type", type).limit(1);
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
+
 /** slips.status 'push' is in the enum but rollup never emits it; map it to void for comparisons. */
 function slipRollupStatus(s: SlipStatus): SlipRollup["status"] {
   return s === "push" ? "void" : s;
@@ -418,6 +439,27 @@ async function fetchEvents(client: PropfeinClient, dates: string[], summary: Run
     }
   });
   return map;
+}
+
+/** GET /v1/events/{id} for events the date-window list did not return. A miss is logged, not fatal. */
+async function fetchMissingEvents(
+  client: PropfeinClient,
+  events: Map<string, PropfeinEvent>,
+  eventIds: string[],
+  summary: RunSummary,
+): Promise<void> {
+  if (eventIds.length === 0) return;
+  await pool(eventIds, EVENT_FETCH_CONCURRENCY, async (id) => {
+    if (events.has(id)) return;
+    try {
+      const full = await client.getEvent(id);
+      events.set(id, full);
+      summary.events_fetched_by_id++;
+    } catch (err) {
+      // leg stays as is this run; a wrong/stale id surfaces here on every tick until re-matched
+      summary.errors.push(`propfein event ${id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
 }
 
 /** Replace list entries with GET /v1/events/{id} so player_stats are present. Cached per run by the map itself. */
@@ -495,8 +537,8 @@ async function rollupAndNotify(db: Db, touched: Map<string, SlipTouch>, now: Dat
     }
     summary.slips_rolled++;
 
-    const prev: SlipRollup = { status: slipRollupStatus(r.old_status), legs_remaining: r.old_legs_remaining };
-    const next: SlipRollup = { status: slipRollupStatus(r.new_status), legs_remaining: r.new_legs_remaining };
+    const prev: SlipRollup = { status: slipRollupStatus(r.old_status), legs_remaining: r.old_legs_remaining, legs_total: r.legs_total };
+    const next: SlipRollup = { status: slipRollupStatus(r.new_status), legs_remaining: r.new_legs_remaining, legs_total: r.legs_total };
 
     const slip = touch.slip;
     const handle = owners.get(slip.user_id)?.handle ?? "someone";
@@ -521,6 +563,13 @@ async function rollupAndNotify(db: Db, touched: Map<string, SlipTouch>, now: Dat
     const url = `/rooms/${r.room_id}/slip/${slipId}`;
 
     for (const type of slipTypes) {
+      // one_away can be detected twice for one slip (legs dropped to 1, then the
+      // last leg's game kicked off later). Pushes dedupe on the notifications
+      // unique index; the feed needs an explicit check.
+      if (type === "one_away" && (await hasRoomEvent(db, slipId, "one_away"))) {
+        summary.one_away_deduped++;
+        continue;
+      }
       roomEvents.push({
         ...base,
         type,

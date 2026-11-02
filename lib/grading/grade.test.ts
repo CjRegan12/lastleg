@@ -56,7 +56,11 @@ function event(
   };
 }
 
-const slip = (status: SlipRollup["status"], legs_remaining: number): SlipRollup => ({ status, legs_remaining });
+const slip = (status: SlipRollup["status"], legs_remaining: number, legs_total = 3): SlipRollup => ({
+  status,
+  legs_remaining,
+  legs_total,
+});
 
 // ---------------------------------------------------------------------------
 // gradeLeg: spread
@@ -403,42 +407,42 @@ describe("gradeLeg event status", () => {
 
 describe("rollupSlip", () => {
   it("any lost -> lost, even with open legs", () => {
-    assert.deepEqual(rollupSlip(["won", "lost", "live"]), { status: "lost", legs_remaining: 1 });
-    assert.deepEqual(rollupSlip(["lost"]), { status: "lost", legs_remaining: 0 });
-    assert.deepEqual(rollupSlip(["pending", "lost", "needs_review"]), { status: "lost", legs_remaining: 2 });
+    assert.deepEqual(rollupSlip(["won", "lost", "live"]), { status: "lost", legs_remaining: 1, legs_total: 3 });
+    assert.deepEqual(rollupSlip(["lost"]), { status: "lost", legs_remaining: 0, legs_total: 1 });
+    assert.deepEqual(rollupSlip(["pending", "lost", "needs_review"]), { status: "lost", legs_remaining: 2, legs_total: 3 });
   });
 
   it("open legs with at least one live -> live", () => {
-    assert.deepEqual(rollupSlip(["won", "live", "pending"]), { status: "live", legs_remaining: 2 });
-    assert.deepEqual(rollupSlip(["live"]), { status: "live", legs_remaining: 1 });
-    assert.deepEqual(rollupSlip(["needs_review", "live"]), { status: "live", legs_remaining: 2 });
+    assert.deepEqual(rollupSlip(["won", "live", "pending"]), { status: "live", legs_remaining: 2, legs_total: 3 });
+    assert.deepEqual(rollupSlip(["live"]), { status: "live", legs_remaining: 1, legs_total: 1 });
+    assert.deepEqual(rollupSlip(["needs_review", "live"]), { status: "live", legs_remaining: 2, legs_total: 2 });
   });
 
   it("open legs with none live -> pending", () => {
-    assert.deepEqual(rollupSlip(["pending", "pending"]), { status: "pending", legs_remaining: 2 });
-    assert.deepEqual(rollupSlip(["won", "pending"]), { status: "pending", legs_remaining: 1 });
-    assert.deepEqual(rollupSlip(["won", "needs_review"]), { status: "pending", legs_remaining: 1 });
-    assert.deepEqual(rollupSlip(["push", "needs_review"]), { status: "pending", legs_remaining: 1 });
+    assert.deepEqual(rollupSlip(["pending", "pending"]), { status: "pending", legs_remaining: 2, legs_total: 2 });
+    assert.deepEqual(rollupSlip(["won", "pending"]), { status: "pending", legs_remaining: 1, legs_total: 2 });
+    assert.deepEqual(rollupSlip(["won", "needs_review"]), { status: "pending", legs_remaining: 1, legs_total: 2 });
+    assert.deepEqual(rollupSlip(["push", "needs_review"]), { status: "pending", legs_remaining: 1, legs_total: 2 });
   });
 
   it("all won -> won", () => {
-    assert.deepEqual(rollupSlip(["won", "won", "won"]), { status: "won", legs_remaining: 0 });
-    assert.deepEqual(rollupSlip(["won"]), { status: "won", legs_remaining: 0 });
+    assert.deepEqual(rollupSlip(["won", "won", "won"]), { status: "won", legs_remaining: 0, legs_total: 3 });
+    assert.deepEqual(rollupSlip(["won"]), { status: "won", legs_remaining: 0, legs_total: 1 });
   });
 
   it("won plus void/push mix -> won", () => {
-    assert.deepEqual(rollupSlip(["won", "push"]), { status: "won", legs_remaining: 0 });
-    assert.deepEqual(rollupSlip(["void", "won", "push"]), { status: "won", legs_remaining: 0 });
+    assert.deepEqual(rollupSlip(["won", "push"]), { status: "won", legs_remaining: 0, legs_total: 2 });
+    assert.deepEqual(rollupSlip(["void", "won", "push"]), { status: "won", legs_remaining: 0, legs_total: 3 });
   });
 
   it("all void/push -> void", () => {
-    assert.deepEqual(rollupSlip(["void"]), { status: "void", legs_remaining: 0 });
-    assert.deepEqual(rollupSlip(["push", "push"]), { status: "void", legs_remaining: 0 });
-    assert.deepEqual(rollupSlip(["void", "push"]), { status: "void", legs_remaining: 0 });
+    assert.deepEqual(rollupSlip(["void"]), { status: "void", legs_remaining: 0, legs_total: 1 });
+    assert.deepEqual(rollupSlip(["push", "push"]), { status: "void", legs_remaining: 0, legs_total: 2 });
+    assert.deepEqual(rollupSlip(["void", "push"]), { status: "void", legs_remaining: 0, legs_total: 2 });
   });
 
   it("no legs -> pending (matches the SQL else branch)", () => {
-    assert.deepEqual(rollupSlip([]), { status: "pending", legs_remaining: 0 });
+    assert.deepEqual(rollupSlip([]), { status: "pending", legs_remaining: 0, legs_total: 0 });
   });
 });
 
@@ -487,6 +491,15 @@ describe("detectTransitions", () => {
 
   it("one_away fires when already at 1 and the slip goes pending -> live", () => {
     assert.deepEqual(detectTransitions(null, null, slip("pending", 1), slip("live", 1)), ["one_away"]);
+  });
+
+  it("one_away never fires for a single bet (legs_total 1)", () => {
+    // the only leg kicks off: pending -> live at legs_remaining 1
+    assert.deepEqual(detectTransitions(null, null, slip("pending", 1, 1), slip("live", 1, 1)), []);
+    // and a single that stays live is just live
+    assert.deepEqual(detectTransitions(null, null, slip("live", 1, 1), slip("live", 1, 1)), []);
+    // a 2-leg parlay still fires
+    assert.deepEqual(detectTransitions(null, null, slip("pending", 1, 2), slip("live", 1, 2)), ["one_away"]);
   });
 
   it("one_away does not fire when still at 1 on a later tick", () => {

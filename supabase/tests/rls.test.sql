@@ -1,7 +1,7 @@
 -- RLS tests for Group Sweat. Run with: supabase test db
 -- Requires pgTAP (enabled by `supabase test db`). Uses seed data ids.
 begin;
-select plan(11);
+select plan(17);
 
 -- helper: impersonate a user
 create or replace function test_as(uid uuid) returns void language plpgsql as $$
@@ -14,6 +14,15 @@ $$;
 -- a third user who is NOT in the room
 insert into auth.users (id, instance_id, aud, role, email, created_at, updated_at)
 values ('00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'outsider@example.com', now(), now());
+
+-- a second room (mike's, cj is not a member) with its own slate, for the
+-- cross-room slate_id check. Created as postgres, before impersonating anyone.
+insert into rooms (id, name, invite_code, created_by)
+values ('10000000-0000-0000-0000-000000000002', 'Other Room', 'OTHERRM1', '00000000-0000-0000-0000-000000000002');
+insert into room_members (room_id, user_id, role)
+values ('10000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000002', 'owner');
+insert into slates (id, room_id, slate_date, status)
+values ('20000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', (now() at time zone 'America/New_York')::date, 'open');
 
 -- 1. member sees the room
 select test_as('00000000-0000-0000-0000-000000000001');
@@ -28,11 +37,38 @@ select is((select count(*) from rooms), 0::bigint, 'outsider sees zero rooms');
 select is((select count(*) from slips), 0::bigint, 'outsider sees zero slips');
 select is((select count(*) from legs), 0::bigint, 'outsider sees zero legs');
 
+-- 3b. private profile columns are not readable on `profiles` (column grants), only via `me`
+select throws_ok(
+  $$ select push_token from profiles $$,
+  '42501', null, 'outsider cannot select push_token from profiles');
+
+-- 3c. `me` is read-only: no update or delete privilege on the view
+select throws_ok(
+  $$ update me set premium_until = now() $$,
+  '42501', null, 'cannot update through me');
+select throws_ok(
+  $$ delete from me $$,
+  '42501', null, 'cannot delete through me');
+
 -- 4. outsider cannot insert a slip into the room
 select throws_ok(
   $$ insert into slips (user_id, room_id, slate_id, book, bet_type, stake, odds_american, potential_payout)
      values ('00000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'draftkings', 'single', 10, -110, 19.09) $$,
   '42501', null, 'outsider cannot insert slip');
+
+-- 4b. member inserting a slip cannot pick its status: the insert guard forces pending
+select test_as('00000000-0000-0000-0000-000000000001');
+select lives_ok(
+  $$ insert into slips (id, user_id, room_id, slate_id, book, bet_type, stake, odds_american, potential_payout, status, legs_total, legs_remaining)
+     values ('30000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'draftkings', 'single', 10, -110, 19.09, 'won', 5, 0) $$,
+  'member can insert a slip into own room');
+select is((select status from slips where id = '30000000-0000-0000-0000-0000000000a1'), 'pending'::slip_status, 'client-supplied status is forced to pending');
+
+-- 4c. member cannot point a slip at a slate from another room
+select throws_ok(
+  $$ insert into slips (user_id, room_id, slate_id, book, bet_type, stake, odds_american, potential_payout)
+     values ('00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002', 'draftkings', 'single', 10, -110, 19.09) $$,
+  '42501', null, 'slate from another room is rejected');
 
 -- 5. member cannot update another member's slip
 select test_as('00000000-0000-0000-0000-000000000002');
