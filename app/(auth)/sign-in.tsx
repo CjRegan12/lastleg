@@ -1,6 +1,6 @@
 import * as AppleAuthentication from "expo-apple-authentication";
 import { useEffect, useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { RGFooter } from "@/components/RGFooter";
 import { Button, Input, Screen } from "@/components/ui";
@@ -8,17 +8,15 @@ import { APP_NAME } from "@/constants/books";
 import { colors, fontSize, radius, spacing } from "@/constants/theme";
 import { confirmAge, useAuth } from "@/lib/auth";
 
-type PhoneStep = "enter" | "verify";
+// Phone OTP is parked until there are users (needs a paid SMS provider in
+// Supabase). The auth helpers for it still exist in lib/auth.tsx.
 
 export default function SignInScreen() {
-  const { session, signInWithApple, sendPhoneOtp, verifyPhoneOtp, sendDevMagicLink } = useAuth();
+  const { session, signInWithApple, sendDevMagicLink } = useAuth();
   const [ageOk, setAgeOk] = useState(false);
-  const [busy, setBusy] = useState<null | "apple" | "phone" | "email">(null);
-  const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
-  const [step, setStep] = useState<PhoneStep>("enter");
+  const [busy, setBusy] = useState<null | "apple" | "email">(null);
   const [email, setEmail] = useState("");
-  const [appleAvailable, setAppleAvailable] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState<boolean | null>(null);
 
   useEffect(() => {
     AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => setAppleAvailable(false));
@@ -45,7 +43,7 @@ export default function SignInScreen() {
 
   return (
     <Screen scroll>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.fill}>
+      <View style={styles.fill}>
         <View style={styles.hero}>
           <Text style={styles.logo}>{APP_NAME}</Text>
           <Text style={styles.tagline}>Your group chat, but the slips grade themselves.</Text>
@@ -74,68 +72,11 @@ export default function SignInScreen() {
               run("apple", signInWithApple);
             }}
           />
+        ) : appleAvailable === false ? (
+          <Text style={styles.unavailable}>Sign in with Apple isn't available on this device.</Text>
         ) : null}
 
-        <View style={styles.divider}>
-          <View style={styles.line} />
-          <Text style={styles.or}>or use your phone</Text>
-          <View style={styles.line} />
-        </View>
-
-        {step === "enter" ? (
-          <>
-            <Input
-              label="Phone"
-              placeholder="(516) 555-0100"
-              keyboardType="phone-pad"
-              autoComplete="tel"
-              textContentType="telephoneNumber"
-              value={phone}
-              onChangeText={setPhone}
-              editable={busy === null}
-            />
-            <Button
-              title="Text me a code"
-              disabled={!canUse || phone.replace(/\D/g, "").length < 10}
-              loading={busy === "phone"}
-              onPress={() =>
-                run("phone", async () => {
-                  await sendPhoneOtp(phone);
-                  setStep("verify");
-                })
-              }
-            />
-          </>
-        ) : (
-          <>
-            <Input
-              label={`Code sent to ${phone}`}
-              placeholder="123456"
-              keyboardType="number-pad"
-              autoComplete="sms-otp"
-              textContentType="oneTimeCode"
-              value={code}
-              onChangeText={setCode}
-              maxLength={8}
-              editable={busy === null}
-            />
-            <Button
-              title="Verify"
-              disabled={!canUse || code.trim().length < 4}
-              loading={busy === "phone"}
-              onPress={() => run("phone", () => verifyPhoneOtp(phone, code))}
-            />
-            <Button
-              title="Use a different number"
-              variant="ghost"
-              onPress={() => {
-                setStep("enter");
-                setCode("");
-              }}
-              style={styles.ghost}
-            />
-          </>
-        )}
+        {!ageOk ? <Text style={styles.hint}>Confirm you're 21+ to continue.</Text> : null}
 
         {__DEV__ ? (
           <View style={styles.dev}>
@@ -164,7 +105,7 @@ export default function SignInScreen() {
         ) : null}
 
         <RGFooter />
-      </KeyboardAvoidingView>
+      </View>
     </Screen>
   );
 }
@@ -199,10 +140,8 @@ const styles = StyleSheet.create({
   gateText: { color: colors.text, fontSize: fontSize.md, fontWeight: "600" },
   apple: { height: 48, width: "100%" },
   dim: { opacity: 0.5 },
-  divider: { flexDirection: "row", alignItems: "center", marginVertical: spacing.xl },
-  line: { flex: 1, height: 1, backgroundColor: colors.border },
-  or: { color: colors.muted, fontSize: fontSize.sm, marginHorizontal: spacing.md },
-  ghost: { marginTop: spacing.sm },
+  unavailable: { color: colors.muted, fontSize: fontSize.sm, textAlign: "center" },
+  hint: { color: colors.muted, fontSize: fontSize.sm, textAlign: "center", marginTop: spacing.md },
   dev: {
     marginTop: spacing.xxl,
     padding: spacing.md,

@@ -12,7 +12,7 @@ Mirror of the Decisions table in the Last Leg Build Plan (Claude Doc). This file
 | Grader | pg_cron every 30s -> Edge Function `grade-legs`; idempotent; only works when a slate is live |
 | Slip parsing | Screenshot -> private Storage -> Edge Function `parse-slip` -> Claude Haiku 5.5 JSON schema output, escalate to Sonnet 5.5 on low confidence |
 | Push | expo-notifications; `notifications` table -> webhook -> Edge Function `send-push` -> fetch to exp.host |
-| Auth | Sign in with Apple + phone OTP; email magic link for dev |
+| Auth | Sign in with Apple only in v1 (Supabase Apple provider, client id io.lastleg.app). Phone OTP parked until there are users (needs a paid SMS provider); helpers kept in lib/auth.tsx. Email magic link for dev. Decided 2026-11-02. |
 | Tail link | Plain sportsbook URLs in v1; no affiliate tags |
 | App Store | LLC/Organization enrollment, 18+ override, US only, 21+ gate, RG footer |
 | Not in v1 | Account sync (SharpSports), live player stats, premium, Android, chat beyond reactions, books beyond DK + FanDuel |
