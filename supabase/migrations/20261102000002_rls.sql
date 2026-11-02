@@ -374,7 +374,7 @@ begin
   values (l.id, l.room_id, auth.uid(), l.status, p_new_status, p_reason);
   update legs
      set status = p_new_status,
-         graded_by = case when (select user_id from slips where id = l.slip_id) = auth.uid() then 'user' else 'peer' end,
+         graded_by = (case when (select user_id from slips where id = l.slip_id) = auth.uid() then 'user' else 'peer' end)::graded_by,
          graded_at = now()
    where id = l.id
   returning * into l;
