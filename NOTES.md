@@ -1,4 +1,4 @@
-# lastleg: v1 codebase written and reviewed, awaiting infra (1)
+# lastleg: first TestFlight build shipped via Codemagic (2)
 
 ## Done this session
 - Full v1 repo authored at /home/claude/lastleg (cloud container; npm registry and Deno were unreachable, so nothing was installed or executed except the grading tests on Node 22).
@@ -14,10 +14,15 @@
 - See DECISIONS.md (mirror of the Build Plan Decisions table).
 - Product calls made during build: one_away only for parlays (legs_total > 1); slips land on the slate of their earliest game date, clamped [today-1, today+10]; parser escalates only on low confidence/refusal; functions fail closed without PROPFEIN_API_URL (ALLOW_MOCK_PROPFEIN=true for dev); other users see only handle/avatar, own profile via `me` view.
 
+## Infra status (2026-11-02 afternoon)
+- GitHub: CjRegan12/lastleg, main. CJ's clone: C:\Users\regan\source\repos\lastleg. Deps pinned by `expo install` (SDK 58, RN 0.88.1, react 19.3.0, reanimated 4.7.1 + react-native-worklets 0.13).
+- Supabase: project `lastleg` ref pdumwhkssabbnfoqwftj. Migrations 0001-0004 applied live, seed loaded, 18 RLS assertions pass against the real DB. Found and fixed one real bug (override_leg enum cast). Security advisor clean except intentional items.
+- Build: Codemagic (not EAS), app id 6ae8ebf18891436486b5b2a7, workflow ios-testflight, webhook on push to main, env group `lastleg`, profile `lastleg_app_store` fetched from Apple (hand-made "Last Leg App Store" profile on cert expiring 2027-09-30). Build #4 (commit 730f7b3) succeeded: LastLeg.ipa published to App Store Connect / TestFlight.
+
 ## Next steps
-1. CJ: create empty GitHub repo CjRegan12/lastleg, then push from /home/claude/lastleg (`git remote add origin ... && git push -u origin main`). Or re-run with folder access so the repo lands in C:\Users\regan\source\repos.
-2. CJ: resolve the Supabase project creation (free plan cap: inkbook + edgefinder already active). Then `supabase link`, `supabase db push`, `supabase db reset` (local) and `supabase test db` to run the 17 RLS assertions. Fix anything that fails; nothing SQL has been executed yet.
-3. On Windows: `npm install`, `npx expo install --fix`, `npm run typecheck`. Expect a handful of type errors from hand-written supabase-js relation types; regenerate `lib/database.types.ts` with `supabase gen types typescript --linked` after db push.
+1. CJ installs from TestFlight, reports first-run issues. Expect UI/device bugs; fix, push, Codemagic rebuilds automatically.
+2. `git diff app.json` on CJ's PC has an uncommitted change from stash pop; decide keep/discard.
+3. `eas init` once (free) so Expo push tokens have a projectId; then upload the APNs key to Expo (`eas credentials`) for pushes to work.
 4. Deploy functions per `supabase/functions/README.md`; set secrets; run `scripts/schedule-grader.sql`. Smoke-test grade-legs against the seed with PROPFEIN_API_URL=mock ALLOW_MOCK_PROPFEIN=true.
 5. Propfein side: implement the 4 endpoints in Build Plan Phase 1 (contract in lib/api/propfein.types.ts).
 6. Collect 20 real DK/FanDuel slip screenshots into evals/slips and run `node --experimental-strip-types scripts/eval-parse.ts`.
