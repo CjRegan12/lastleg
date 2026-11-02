@@ -6,9 +6,14 @@
  * `x-webhook-secret` header, which must equal the WEBHOOK_SECRET secret.
  *
  * Selects notifications with expo_ticket_id set, expo_receipt_status null and
- * sent_at older than 15 minutes (limit 1000), POSTs the ticket ids to
- * exp.host getReceipts in chunks of 1000, and writes expo_receipt_status
- * ('ok' or the Expo error code). DeviceNotRegistered also nulls the user's push_token.
+ * sent_at between 24 hours and 15 minutes ago (limit 1000), POSTs the ticket ids
+ * to exp.host getReceipts in chunks of 1000, and writes expo_receipt_status
+ * ('ok' or the Expo error code). Expo keeps receipts for about a day, so rows
+ * older than 24 hours with no receipt are marked 'expired' and never asked again.
+ *
+ * DeviceNotRegistered nulls the user's push_token, but only if the profile has not
+ * been updated since that notification was sent (profiles.updated_at <= sent_at):
+ * a token the app re-registered after the failed send is left alone.
  *
  * Receipts Expo has not produced yet are simply left for the next run.
  */
@@ -19,12 +24,14 @@ const EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
 const CHUNK = 1000;
 const SELECT_LIMIT = 1000;
 const MIN_AGE_MINUTES = 15;
+const MAX_AGE_HOURS = 24;
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 interface PendingRow {
   id: number;
   user_id: string;
   expo_ticket_id: string;
+  sent_at: string;
 }
 
 interface ExpoReceipt {
@@ -84,17 +91,32 @@ Deno.serve(async (req: Request) => {
     ok: 0,
     errors: 0,
     still_pending: 0,
+    expired: 0,
     tokens_cleared: 0,
     failures: [] as string[],
   };
 
   try {
     const cutoff = new Date(Date.now() - MIN_AGE_MINUTES * 60_000).toISOString();
-    const { data, error } = await admin
+    const floor = new Date(Date.now() - MAX_AGE_HOURS * 3_600_000).toISOString();
+
+    // 0. give up on anything older than Expo's receipt retention
+    const { data: expiredRows, error: expErr } = await admin
       .from("notifications")
-      .select("id, user_id, expo_ticket_id")
+      .update({ expo_receipt_status: "expired" })
       .not("expo_ticket_id", "is", null)
       .is("expo_receipt_status", null)
+      .lte("sent_at", floor)
+      .select("id");
+    if (expErr) summary.failures.push(`mark expired: ${expErr.message}`);
+    else summary.expired = expiredRows?.length ?? 0;
+
+    const { data, error } = await admin
+      .from("notifications")
+      .select("id, user_id, expo_ticket_id, sent_at")
+      .not("expo_ticket_id", "is", null)
+      .is("expo_receipt_status", null)
+      .gt("sent_at", floor)
       .lt("sent_at", cutoff)
       .order("sent_at", { ascending: true })
       .limit(SELECT_LIMIT);
@@ -104,7 +126,8 @@ Deno.serve(async (req: Request) => {
     summary.checked = rows.length;
     if (rows.length === 0) return json(summary);
 
-    const usersToClear = new Set<string>();
+    // user_id -> latest sent_at among their DeviceNotRegistered receipts
+    const usersToClear = new Map<string, string>();
 
     for (const batch of chunk(rows, CHUNK)) {
       let receipts: Record<string, ExpoReceipt>;
@@ -130,7 +153,10 @@ Deno.serve(async (req: Request) => {
         }
         const code = receipt.details?.error ?? "error";
         errored.push({ id: row.id, code });
-        if (code === "DeviceNotRegistered") usersToClear.add(row.user_id);
+        if (code === "DeviceNotRegistered") {
+          const prev = usersToClear.get(row.user_id);
+          if (!prev || row.sent_at > prev) usersToClear.set(row.user_id, row.sent_at);
+        }
       }
 
       if (okIds.length > 0) {
@@ -159,14 +185,18 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (usersToClear.size > 0) {
+    // Clear tokens only where the profile has not changed since the failed send.
+    // Expo receipts do not echo the token, so updated_at <= sent_at is the guard.
+    for (const [userId, sentAt] of usersToClear) {
       const { data: cleared, error: clearErr } = await admin
         .from("profiles")
         .update({ push_token: null })
-        .in("id", [...usersToClear])
+        .eq("id", userId)
+        .not("push_token", "is", null)
+        .lte("updated_at", sentAt)
         .select("id");
-      if (clearErr) summary.failures.push(`clear tokens: ${clearErr.message}`);
-      else summary.tokens_cleared = cleared?.length ?? 0;
+      if (clearErr) summary.failures.push(`clear token ${userId}: ${clearErr.message}`);
+      else summary.tokens_cleared += cleared?.length ?? 0;
     }
 
     return json(summary);

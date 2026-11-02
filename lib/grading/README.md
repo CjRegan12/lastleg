@@ -15,7 +15,7 @@ The grader never emits `void`; only `override_leg()` does.
 
 ## Slip rollup and feed events
 
-`rollupSlip(legStatuses)` mirrors the SQL `rollup_slip()` exactly: any lost -> lost; any open leg -> live if a leg is live else pending; any won -> won; all void/push -> void. `detectTransitions()` turns a before/after pair into room events: `leg_hit`, `leg_lost`, `slip_dead`, `cashed`, and `one_away` (slip live, legs_remaining goes from >1 to exactly 1).
+`rollupSlip(legStatuses)` mirrors the SQL `rollup_slip()` exactly: any lost -> lost; any open leg -> live if a leg is live else pending; any won -> won; all void/push -> void. `detectTransitions()` turns a before/after pair into room events: `leg_hit`, `leg_lost`, `slip_dead`, `cashed`, and `one_away` (legs_remaining drops from >1 to exactly 1 on an unsettled slip, or a slip already at 1 goes pending -> live when its last game kicks off).
 
 ## Tests
 

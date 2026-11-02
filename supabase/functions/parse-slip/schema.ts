@@ -123,7 +123,7 @@ const LEG_SCHEMA = {
       type: ["integer", "null"],
       description: "Odds for this leg as an American integer (e.g. -110, +250). null if not shown (common on SGP legs).",
     },
-    confidence: { type: "number", minimum: 0, maximum: 1 },
+    confidence: { type: "number", description: "0 to 1. Clamped in code after parsing; no min/max here (not supported by structured output)." },
   },
 } as const;
 
@@ -144,9 +144,24 @@ export const SLIP_SCHEMA = {
       description: "Total payout (to win + stake) in dollars as printed. If only 'to win' is shown, add the stake.",
     },
     legs: { type: "array", items: LEG_SCHEMA },
-    overall_confidence: { type: "number", minimum: 0, maximum: 1 },
+    overall_confidence: { type: "number", description: "0 to 1. Clamped in code after parsing; no min/max here (not supported by structured output)." },
   },
 } as const;
+
+/** Clamp a confidence to [0, 1]; NaN becomes 0. The schema cannot enforce this, so code does. */
+export function clamp01(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(1, Math.max(0, n));
+}
+
+/** Clamp every confidence field in place-safe copy. Call right after isParsedSlip passes. */
+export function clampConfidences(slip: ParsedSlip): ParsedSlip {
+  return {
+    ...slip,
+    overall_confidence: clamp01(slip.overall_confidence),
+    legs: slip.legs.map((l) => ({ ...l, confidence: clamp01(typeof l.confidence === "number" ? l.confidence : 0) })),
+  };
+}
 
 /** Runtime guard: cheap shape check on whatever the model returned before we trust it. */
 export function isParsedSlip(x: unknown): x is ParsedSlip {

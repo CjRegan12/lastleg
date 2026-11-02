@@ -31,10 +31,31 @@ alter table tails enable row level security;
 alter table notifications enable row level security;
 
 -- ---------- profiles ----------
+-- Row policy lets everyone read everyone, but column grants hide the private
+-- columns (push_token, premium_until, quiet hours, age_confirmed_at). The owner
+-- reads their own full row through the `me` view below.
+revoke select on profiles from authenticated, anon;
+grant select (id, handle, avatar_url, created_at) on profiles to authenticated;
 create policy "profiles: anyone authenticated can read"
   on profiles for select to authenticated using (true);
+
+-- Owner may change only these columns. premium_until is service role only;
+-- age_confirmed_at stays owner-settable because it is a self-declaration.
+revoke update on profiles from authenticated, anon;
+grant update (handle, avatar_url, push_token, quiet_hours_start, quiet_hours_end, age_confirmed_at)
+  on profiles to authenticated;
 create policy "profiles: update own"
   on profiles for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
+
+-- Full own-row read. Deliberately NOT security_invoker: column grants are
+-- table-wide, so an invoker view would be denied the private columns too. The
+-- view runs as its owner and the hard-coded `id = auth.uid()` filter is the
+-- only thing that scopes it, which is exactly the owner-only read we want.
+create view public.me
+with (security_invoker = false)
+as select * from profiles where id = auth.uid();
+revoke all on public.me from public, anon;
+grant select on public.me to authenticated;
 
 -- ---------- rooms ----------
 create policy "rooms: members read"
@@ -63,9 +84,16 @@ create policy "slips: members read"
 create policy "slips: insert own in a room you belong to"
   on slips for insert to authenticated
   with check (user_id = auth.uid() and is_room_member(room_id));
-create policy "slips: owner updates own metadata"
+-- Owner edits a pending slip's metadata only. status/legs_*/settled_at are the
+-- grader's (service role); room_id/slate_id/user_id are fixed at insert. Column
+-- grants enforce the column list, the policy enforces pending + same room.
+revoke update on slips from authenticated, anon;
+grant update (book, bet_type, stake, odds_american, potential_payout, screenshot_path, parsed_json, parse_confidence)
+  on slips to authenticated;
+create policy "slips: owner updates own pending slip"
   on slips for update to authenticated
-  using (user_id = auth.uid()) with check (user_id = auth.uid());
+  using (user_id = auth.uid() and status = 'pending')
+  with check (user_id = auth.uid() and is_room_member(room_id));
 create policy "slips: delete own while pending"
   on slips for delete to authenticated
   using (user_id = auth.uid() and status = 'pending');
@@ -76,6 +104,47 @@ create policy "legs: members read"
 create policy "legs: insert on own slip"
   on legs for insert to authenticated
   with check (exists (select 1 from slips s where s.id = slip_id and s.user_id = auth.uid()) and is_room_member(room_id));
+-- Client inserts cannot pick their own room_id, status or grading columns.
+-- Service role (grader, parser) and postgres (migrations, seed, tests) are trusted.
+create or replace function legs_before_insert_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  claims text := nullif(current_setting('request.jwt.claims', true), '');
+  jwt_role text;
+  parent slips;
+begin
+  jwt_role := case when claims is null then null else claims::jsonb->>'role' end;
+  -- null role = no JWT (postgres/migrations/seed); service_role = trusted backend
+  if jwt_role is null or jwt_role = 'service_role' then
+    return new;
+  end if;
+
+  select * into parent from slips where id = new.slip_id;
+  if parent.id is null then
+    raise exception 'slip % not found', new.slip_id using errcode = 'P0002';
+  end if;
+  if parent.user_id is distinct from auth.uid() then
+    raise exception 'cannot add legs to another user''s slip' using errcode = '42501';
+  end if;
+  if parent.status <> 'pending' then
+    raise exception 'cannot add legs to a slip that is not pending' using errcode = '42501';
+  end if;
+
+  new.room_id := parent.room_id;
+  new.status := case when new.propfein_event_id is null then 'needs_review'::leg_status else 'pending'::leg_status end;
+  new.graded_by := null;
+  new.graded_at := null;
+  new.current_value := null;
+  return new;
+end;
+$$;
+create trigger legs_before_insert_guard
+  before insert on legs
+  for each row execute function legs_before_insert_guard();
 -- status changes by clients go through override_leg() RPC; grader is service role
 create policy "legs: delete on own pending slip"
   on legs for delete to authenticated
@@ -88,7 +157,11 @@ create policy "leg_overrides: members read"
 
 -- ---------- parse_corrections (append only) ----------
 create policy "parse_corrections: insert own"
-  on parse_corrections for insert to authenticated with check (user_id = auth.uid());
+  on parse_corrections for insert to authenticated
+  with check (
+    user_id = auth.uid()
+    and exists (select 1 from slips s where s.id = slip_id and s.user_id = auth.uid())
+  );
 create policy "parse_corrections: read own"
   on parse_corrections for select to authenticated using (user_id = auth.uid());
 
@@ -165,9 +238,10 @@ declare
   s slates;
 begin
   if not is_room_member(p_room_id) then raise exception 'not a room member'; end if;
+  -- do nothing on conflict so no UPDATE (and no slates_broadcast) fires for an existing slate
   insert into slates (room_id, slate_date) values (p_room_id, p_date)
-  on conflict (room_id, slate_date) do update set slate_date = excluded.slate_date
-  returning * into s;
+  on conflict (room_id, slate_date) do nothing;
+  select * into s from slates where room_id = p_room_id and slate_date = p_date;
   return s;
 end;
 $$;
@@ -197,15 +271,30 @@ begin
          graded_at = now()
    where id = l.id
   returning * into l;
-  perform rollup_slip(l.slip_id);
+  perform rollup_slip(l.slip_id); -- set-returning now; result discarded here
   return l;
 end;
 $$;
 grant execute on function override_leg(uuid, leg_status, text) to authenticated;
 
 -- Recompute a slip's status and legs_remaining from its legs. Used by the grader and override_leg.
+-- Locks the slip row so two overlapping grader runs serialize, and returns the
+-- before/after pair so the caller can detect transitions (one_away, cashed, slip_dead)
+-- without a second read. Must stay identical to rollupSlip() in lib/grading/grade.ts.
 create or replace function rollup_slip(p_slip_id uuid)
-returns slips
+returns table (
+  id uuid,
+  room_id uuid,
+  slate_id uuid,
+  user_id uuid,
+  old_status slip_status,
+  new_status slip_status,
+  old_legs_remaining int,
+  new_legs_remaining int,
+  legs_total int,
+  potential_payout numeric,
+  stake numeric
+)
 language plpgsql
 security definer
 set search_path = public
@@ -217,33 +306,44 @@ declare
   n_won int;
   n_void int;
   n_open int;
-  new_status slip_status;
+  n_live int;
+  v_new_status slip_status;
 begin
-  select count(*),
-         count(*) filter (where status = 'lost'),
-         count(*) filter (where status = 'won'),
-         count(*) filter (where status in ('void', 'push')),
-         count(*) filter (where status in ('pending', 'live', 'needs_review'))
-    into n_total, n_lost, n_won, n_void, n_open
-    from legs where slip_id = p_slip_id;
-
-  if n_lost > 0 then new_status := 'lost';
-  elsif n_open > 0 then
-    new_status := case when exists (select 1 from legs where slip_id = p_slip_id and status = 'live') then 'live' else 'pending' end;
-  elsif n_won > 0 then new_status := 'won';
-  elsif n_void = n_total and n_total > 0 then new_status := 'void';
-  else new_status := 'pending';
+  select * into s from slips sl where sl.id = p_slip_id for update;
+  if s.id is null then
+    raise exception 'slip % not found', p_slip_id using errcode = 'P0002';
   end if;
 
-  update slips
-     set status = new_status,
+  select count(*),
+         count(*) filter (where l.status = 'lost'),
+         count(*) filter (where l.status = 'won'),
+         count(*) filter (where l.status in ('void', 'push')),
+         count(*) filter (where l.status in ('pending', 'live', 'needs_review')),
+         count(*) filter (where l.status = 'live')
+    into n_total, n_lost, n_won, n_void, n_open, n_live
+    from legs l where l.slip_id = p_slip_id;
+
+  if n_lost > 0 then v_new_status := 'lost';
+  elsif n_open > 0 then v_new_status := case when n_live > 0 then 'live' else 'pending' end;
+  elsif n_won > 0 then v_new_status := 'won';
+  elsif n_void = n_total and n_total > 0 then v_new_status := 'void';
+  else v_new_status := 'pending';
+  end if;
+
+  update slips sl
+     set status = v_new_status,
          legs_total = n_total,
          legs_remaining = n_open,
-         settled_at = case when new_status in ('won', 'lost', 'void', 'push') then coalesce(settled_at, now()) else null end
-   where id = p_slip_id
-  returning * into s;
-  return s;
+         settled_at = case when v_new_status in ('won', 'lost', 'void', 'push') then coalesce(sl.settled_at, now()) else null end
+   where sl.id = p_slip_id;
+
+  return query
+    select s.id, s.room_id, s.slate_id, s.user_id,
+           s.status, v_new_status,
+           s.legs_remaining::int, n_open,
+           n_total,
+           s.potential_payout::numeric, s.stake::numeric;
 end;
 $$;
--- service role calls this; authenticated only through override_leg
-revoke execute on function rollup_slip(uuid) from public;
+-- service role calls this; authenticated only through override_leg (security definer)
+revoke execute on function rollup_slip(uuid) from public, anon, authenticated;

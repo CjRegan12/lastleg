@@ -3,6 +3,7 @@ import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 
 import type { Enums, Inserts, Json } from "@/lib/database.types";
+import { todayNY } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 
 // ---------------------------------------------------------------------------
@@ -122,13 +123,28 @@ export async function uploadSlipImage(userId: string, localUri: string): Promise
 // Parse: Edge Function `parse-slip`
 // ---------------------------------------------------------------------------
 
+/** Wire shape of parse-slip's 200 response. `parsed` has no `match`; matches are positional. */
+interface ParseSlipResponse {
+  parsed: Omit<ParsedSlip, "legs"> & { legs: Omit<ParsedLeg, "match">[] };
+  matches: { match: LegMatch | null; alternates: LegMatch[] }[];
+  model_used: string;
+  escalated: boolean;
+  usage: { input_tokens: number; output_tokens: number };
+}
+
 export async function callParseSlip(storagePath: string, roomId: string): Promise<ParsedSlip> {
-  const { data, error } = await supabase.functions.invoke<ParsedSlip>("parse-slip", {
+  const { data, error } = await supabase.functions.invoke<ParseSlipResponse>("parse-slip", {
     body: { storage_path: storagePath, room_id: roomId },
   });
   if (error) throw error;
-  if (!data || !Array.isArray(data.legs)) throw new Error("parse-slip returned an unexpected shape");
-  return data;
+  if (!data || !data.parsed || !Array.isArray(data.parsed.legs)) {
+    throw new Error("parse-slip returned an unexpected shape");
+  }
+  const matches = Array.isArray(data.matches) ? data.matches : [];
+  return {
+    ...data.parsed,
+    legs: data.parsed.legs.map((l, i) => ({ ...l, match: matches[i]?.match ?? null })),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -143,16 +159,37 @@ export interface SaveSlipInput {
   parsed: ParsedSlip;
   /** What the user confirmed. */
   confirmed: ParsedSlip;
-  /** Defaults to today's slate (ensure_slate's default). */
+  /**
+   * Explicit slate date override. When omitted the slip goes on the slate of
+   * the earliest game date printed on it (event_date_hint), else today NY.
+   */
   slateDate?: string;
+}
+
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Slate for a slip is the date of its games, not the day it was uploaded: a slip
+ * dropped Tuesday for Thursday night football belongs on Thursday's board.
+ * Earliest valid event_date_hint wins; no hints -> today in New York.
+ */
+export function slateDateFor(legs: Pick<ParsedLeg, "event_date_hint">[], now: Date = new Date()): string {
+  let earliest: string | null = null;
+  for (const leg of legs) {
+    const d = leg.event_date_hint;
+    if (!d || !YMD_RE.test(d)) continue;
+    if (earliest === null || d < earliest) earliest = d;
+  }
+  return earliest ?? todayNY(now);
 }
 
 export async function saveSlip(input: SaveSlipInput): Promise<string> {
   const { userId, roomId, screenshotPath, parsed, confirmed } = input;
 
-  const slateArgs: { p_room_id: string; p_date?: string } = { p_room_id: roomId };
-  if (input.slateDate) slateArgs.p_date = input.slateDate;
-  const { data: slate, error: slateErr } = await supabase.rpc("ensure_slate", slateArgs);
+  const { data: slate, error: slateErr } = await supabase.rpc("ensure_slate", {
+    p_room_id: roomId,
+    p_date: input.slateDate ?? slateDateFor(confirmed.legs),
+  });
   if (slateErr) throw slateErr;
 
   const slipInsert: Inserts<"slips"> = {
@@ -196,8 +233,14 @@ export async function saveSlip(input: SaveSlipInput): Promise<string> {
     match_confidence: leg.match ? clamp01(leg.match.confidence) : null,
   }));
   if (legInserts.length > 0) {
-    const { error: legsErr } = await supabase.from("legs").insert(legInserts);
-    if (legsErr) throw legsErr;
+    try {
+      const { error: legsErr } = await supabase.from("legs").insert(legInserts);
+      if (legsErr) throw legsErr;
+    } catch (e) {
+      // Do not leave a legless slip on the board. RLS lets the owner delete while pending.
+      await supabase.from("slips").delete().eq("id", slip.id);
+      throw e;
+    }
   }
 
   const corrections = diffCorrections(parsed, confirmed).map((c) => ({

@@ -524,6 +524,7 @@ export type Database = {
           user_id: string;
           room_id: string | null;
           slate_id: string | null;
+          slip_id: string | null;
           type: Database["public"]["Enums"]["notification_type"];
           title: string;
           body: string;
@@ -538,6 +539,7 @@ export type Database = {
           user_id: string;
           room_id?: string | null;
           slate_id?: string | null;
+          slip_id?: string | null;
           type: Database["public"]["Enums"]["notification_type"];
           title: string;
           body: string;
@@ -552,6 +554,7 @@ export type Database = {
           user_id?: string;
           room_id?: string | null;
           slate_id?: string | null;
+          slip_id?: string | null;
           type?: Database["public"]["Enums"]["notification_type"];
           title?: string;
           body?: string;
@@ -583,10 +586,22 @@ export type Database = {
             referencedRelation: "slates";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "notifications_slip_id_fkey";
+            columns: ["slip_id"];
+            isOneToOne: false;
+            referencedRelation: "slips";
+            referencedColumns: ["id"];
+          },
         ];
       };
     };
     Views: {
+      /** The caller's own profiles row, every column. `profiles` itself only exposes id/handle/avatar_url/created_at to other users. */
+      me: {
+        Row: Database["public"]["Tables"]["profiles"]["Row"];
+        Relationships: [];
+      };
       room_standings: {
         Row: {
           room_id: string | null;
@@ -656,6 +671,23 @@ export type Database = {
         Args: { p_room_id: string };
         Returns: boolean;
       };
+      /** Service role only. Returns one row (read `rows[0]`) with the before/after pair for transition detection. */
+      rollup_slip: {
+        Args: { p_slip_id: string };
+        Returns: {
+          id: string;
+          room_id: string;
+          slate_id: string;
+          user_id: string;
+          old_status: Database["public"]["Enums"]["slip_status"];
+          new_status: Database["public"]["Enums"]["slip_status"];
+          old_legs_remaining: number;
+          new_legs_remaining: number;
+          legs_total: number;
+          potential_payout: number;
+          stake: number;
+        }[];
+      };
     };
     Enums: {
       room_role: "owner" | "member";
@@ -699,6 +731,8 @@ export type Views<T extends keyof Database["public"]["Views"]> =
 export type Enums<T extends keyof Database["public"]["Enums"]> = Database["public"]["Enums"][T];
 
 export type Profile = Tables<"profiles">;
+/** Own full profile via the `me` view (push_token, quiet hours, premium_until, age_confirmed_at). */
+export type MyProfile = Views<"me">;
 export type Room = Tables<"rooms">;
 export type Slate = Tables<"slates">;
 export type Slip = Tables<"slips">;

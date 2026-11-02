@@ -476,26 +476,31 @@ describe("detectTransitions", () => {
     assert.deepEqual(detectTransitions(null, null, slip("live", 1), slip("won", 0)), ["cashed"]);
   });
 
-  it("legs_remaining >1 -> 1 while live emits one_away", () => {
+  it("legs_remaining >1 -> 1 emits one_away whether the slip is live or pending", () => {
     assert.deepEqual(detectTransitions(null, null, slip("live", 2), slip("live", 1)), ["one_away"]);
     assert.deepEqual(detectTransitions(null, null, slip("live", 3), slip("live", 1)), ["one_away"]);
     assert.deepEqual(detectTransitions(null, null, slip("pending", 3), slip("live", 1)), ["one_away"]);
+    // the other legs settled via override before anything kicked off
+    assert.deepEqual(detectTransitions(null, null, slip("pending", 2), slip("pending", 1)), ["one_away"]);
+    assert.deepEqual(detectTransitions(null, null, slip("live", 2), slip("pending", 1)), ["one_away"]);
   });
 
-  it("one_away does not fire for a single-leg slip going live", () => {
-    assert.deepEqual(detectTransitions(null, null, slip("pending", 1), slip("live", 1)), []);
+  it("one_away fires when already at 1 and the slip goes pending -> live", () => {
+    assert.deepEqual(detectTransitions(null, null, slip("pending", 1), slip("live", 1)), ["one_away"]);
   });
 
   it("one_away does not fire when still at 1 on a later tick", () => {
     assert.deepEqual(detectTransitions(null, null, slip("live", 1), slip("live", 1)), []);
+    assert.deepEqual(detectTransitions(null, null, slip("pending", 1), slip("pending", 1)), []);
   });
 
-  it("one_away does not fire when the slip dies at the same time", () => {
+  it("one_away does not fire when the slip settles at the same time", () => {
     assert.deepEqual(detectTransitions(null, null, slip("live", 2), slip("lost", 1)), ["slip_dead"]);
+    assert.deepEqual(detectTransitions(null, null, slip("live", 2), slip("void", 1)), []);
   });
 
-  it("one_away does not fire when the slip is pending (no leg live)", () => {
-    assert.deepEqual(detectTransitions(null, null, slip("pending", 2), slip("pending", 1)), []);
+  it("one_away does not fire for live -> pending at 1 (nothing kicked off)", () => {
+    assert.deepEqual(detectTransitions(null, null, slip("live", 1), slip("pending", 1)), []);
   });
 
   it("combined leg + slip changes emit both, leg event first", () => {

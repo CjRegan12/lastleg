@@ -15,8 +15,6 @@ import { RGFooter } from "@/components/RGFooter";
 import { Avatar, AvatarStack, Badge, Button, Screen } from "@/components/ui";
 import { BET_TYPE_LABELS, BOOK_LABELS, BOOK_URLS, MARKET_LABELS } from "@/constants/books";
 import { colors, fontSize, radius, spacing, statusColor, statusLabel } from "@/constants/theme";
-import { propfeinFromEnv } from "@/lib/api/propfein";
-import type { PropfeinEvent } from "@/lib/api/propfein.types";
 import { useUserId } from "@/lib/auth";
 import type { Enums, Leg, Slip } from "@/lib/database.types";
 import { formatLine, formatMoney, formatOdds, formatRelative } from "@/lib/format";
@@ -32,8 +30,6 @@ interface OverrideInfo {
   created_at: string;
 }
 
-const propfein = propfeinFromEnv(process.env as Record<string, string | undefined>);
-
 export default function SlipDetailScreen() {
   const { id: roomId, slipId } = useLocalSearchParams<{ id: string; slipId: string }>();
   const userId = useUserId();
@@ -41,7 +37,6 @@ export default function SlipDetailScreen() {
   const [legs, setLegs] = useState<Leg[]>([]);
   const [overrides, setOverrides] = useState<Record<string, OverrideInfo>>({});
   const [sharedBy, setSharedBy] = useState<Record<string, string[]>>({});
-  const [events, setEvents] = useState<Record<string, PropfeinEvent>>({});
   const [tailed, setTailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,20 +98,6 @@ export default function SlipDetailScreen() {
       }
       setSharedBy(map);
     }
-
-    // Event context from Propfein (never stored locally). Best effort.
-    const eventIds = Array.from(new Set(matched.map((l) => l.propfein_event_id as string)));
-    const fetched: Record<string, PropfeinEvent> = {};
-    await Promise.all(
-      eventIds.map(async (eid) => {
-        try {
-          fetched[eid] = await propfein.getEvent(eid);
-        } catch {
-          /* leave blank; the leg still renders */
-        }
-      }),
-    );
-    setEvents(fetched);
   }, [slipId, roomId, userId]);
 
   useEffect(() => {
@@ -223,7 +204,6 @@ export default function SlipDetailScreen() {
       <Text style={styles.section}>Legs</Text>
       {legs.map((leg) => {
         const c = statusColor(leg.status);
-        const ev = leg.propfein_event_id ? events[leg.propfein_event_id] : undefined;
         const others = sharedBy[legKey(leg.propfein_event_id, leg.propfein_market_key, leg.line)] ?? [];
         const ov = overrides[leg.id];
         return (
@@ -246,21 +226,18 @@ export default function SlipDetailScreen() {
               {leg.line != null ? ` · line ${formatLine(leg.line, leg.market)}` : ""}
               {leg.leg_odds_american != null ? ` · ${formatOdds(leg.leg_odds_american)}` : ""}
             </Text>
-            {leg.status === "live" && leg.current_value != null && leg.line != null ? (
+            {/* Live/final context comes from the leg row itself (the grader writes
+                current_value); the app never talks to Propfein directly. */}
+            {leg.current_value != null && leg.line != null && leg.status !== "pending" ? (
               <Text style={[styles.progress, { color: c }]}>
-                {leg.current_value} / {leg.line}
+                {formatLine(leg.current_value, leg.market)} / {formatLine(leg.line, leg.market)}
                 {leg.side ? ` (${leg.side})` : ""}
               </Text>
             ) : null}
-            {ev ? (
-              <Text style={styles.event}>
-                {ev.away_team.abbreviation} @ {ev.home_team.abbreviation}
-                {ev.status === "live"
-                  ? ` · ${ev.away_score ?? 0}-${ev.home_score ?? 0}${ev.clock ? ` · P${ev.period ?? ""} ${ev.clock}` : ""}`
-                  : ev.status === "final"
-                    ? ` · Final ${ev.away_score ?? 0}-${ev.home_score ?? 0}`
-                    : ` · ${new Date(ev.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`}
-              </Text>
+            {leg.status === "pending" ? (
+              <Text style={styles.event}>Not started. Updates land here once the game is live.</Text>
+            ) : leg.status === "live" && leg.current_value == null ? (
+              <Text style={styles.event}>Live. Waiting on the first number from the grader.</Text>
             ) : leg.status === "needs_review" ? (
               <Text style={styles.warn}>Could not match this to a game. Long press to grade it by hand.</Text>
             ) : null}

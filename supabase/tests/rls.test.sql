@@ -1,7 +1,7 @@
 -- RLS tests for Group Sweat. Run with: supabase test db
 -- Requires pgTAP (enabled by `supabase test db`). Uses seed data ids.
 begin;
-select plan(10);
+select plan(11);
 
 -- helper: impersonate a user
 create or replace function test_as(uid uuid) returns void language plpgsql as $$

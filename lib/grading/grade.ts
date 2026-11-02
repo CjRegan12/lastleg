@@ -251,8 +251,17 @@ export function detectTransitions(
   const slipChanged = prevSlip.status !== nextSlip.status;
   if (slipChanged && nextSlip.status === "lost") out.push("slip_dead");
   if (slipChanged && nextSlip.status === "won") out.push("cashed");
-  if (nextSlip.status === "live" && prevSlip.legs_remaining > 1 && nextSlip.legs_remaining === 1) {
-    out.push("one_away");
+
+  // one_away: the slip is still open (pending or live) and either
+  //  a) legs_remaining just dropped from >1 to exactly 1, or
+  //  b) legs_remaining was already 1 and the slip went pending -> live
+  //     (the last leg's game just kicked off).
+  const stillOpen = nextSlip.status === "pending" || nextSlip.status === "live";
+  if (stillOpen && nextSlip.legs_remaining === 1) {
+    const droppedToOne = prevSlip.legs_remaining > 1;
+    const lastLegWentLive =
+      prevSlip.legs_remaining === 1 && prevSlip.status === "pending" && nextSlip.status === "live";
+    if (droppedToOne || lastLegWentLive) out.push("one_away");
   }
 
   return out;

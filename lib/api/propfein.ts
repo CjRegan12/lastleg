@@ -118,9 +118,20 @@ export class PropfeinClient {
   }
 }
 
-/** Build a client from environment. Works in Expo (EXPO_PUBLIC_*) and Deno (Deno.env). */
+/**
+ * Build a client from environment. Works in Expo (EXPO_PUBLIC_*) and Deno (Deno.env).
+ *
+ * Fails closed: an unset URL resolves to "mock", and mock mode is refused unless
+ * ALLOW_MOCK_PROPFEIN=true is set alongside it. A production deploy that forgot
+ * PROPFEIN_API_URL must crash, not quietly grade real slips against fixtures.
+ */
 export function propfeinFromEnv(env: Record<string, string | undefined>): PropfeinClient {
   const baseUrl = env.PROPFEIN_API_URL ?? env.EXPO_PUBLIC_PROPFEIN_API_URL ?? "mock";
+  if (baseUrl === "mock" && env.ALLOW_MOCK_PROPFEIN !== "true") {
+    throw new Error(
+      "propfein_not_configured: PROPFEIN_API_URL is unset or 'mock'; set a real URL or ALLOW_MOCK_PROPFEIN=true for dev",
+    );
+  }
   const apiKey = env.PROPFEIN_API_KEY ?? "";
   return new PropfeinClient({ baseUrl, apiKey });
 }

@@ -2,8 +2,13 @@
  * parse-slip: screenshot in private Storage -> Claude structured output -> Propfein leg matches.
  *
  * Deploy with verify_jwt ON (default): `supabase functions deploy parse-slip`.
- * The caller is the signed-in user; we re-verify them via auth.getUser() and
- * require the storage path to live in their own folder.
+ * The caller is the signed-in user; we re-verify them via auth.getUser(), require
+ * the storage path to live in their own folder, and require them to be a member
+ * of room_id (checked through the user's own client, so RLS does the work).
+ *
+ * The image is downloaded with the service role and sent to Claude as base64, not
+ * as a signed URL: that works against local `functions serve` (no public URL) and
+ * the escalation call can never hit an expired link.
  *
  * Request:  POST { storage_path: "<user_id>/<uuid>.jpg", room_id: "<uuid>" }
  * Response: { parsed, matches, model_used, usage: { input_tokens, output_tokens } }
@@ -19,16 +24,16 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { propfeinFromEnv } from "../_shared/propfein.ts";
 import type { LegMatchCandidate, LegMatchRequest, Sport } from "../_shared/propfein.types.ts";
-import { isParsedSlip, SLIP_SCHEMA, STAT_TYPES, type ParsedLeg, type ParsedSlip } from "./schema.ts";
+import { clampConfidences, isParsedSlip, SLIP_SCHEMA, STAT_TYPES, type ParsedLeg, type ParsedSlip } from "./schema.ts";
 
 // ---------- config ----------
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const BUCKET = "slips";
-const SIGNED_URL_TTL_SECONDS = 60;
 const MAX_TOKENS = 2000;
+/** DECISIONS: escalate to the fallback model on low confidence or an unusable primary result. */
 const ESCALATE_BELOW_CONFIDENCE = 0.8;
-const ESCALATE_ABOVE_LEGS = 4;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // Anthropic image limit
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
@@ -143,7 +148,34 @@ function toMatchRequest(leg: ParsedLeg, fallbackDate: string): LegMatchRequest {
   };
 }
 
-async function callClaude(apiKey: string, model: string, imageUrl: string): Promise<ClaudeCallResult> {
+type ImageMediaType = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+
+interface ImageInput {
+  media_type: ImageMediaType;
+  data: string; // base64
+}
+
+/** Media type from the storage path's extension. The app always uploads .jpg; be lenient anyway. */
+function mediaTypeFor(path: string): ImageMediaType {
+  const ext = path.toLowerCase().split(".").pop() ?? "";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  if (ext === "gif") return "image/gif";
+  return "image/jpeg";
+}
+
+/** ArrayBuffer -> base64 without blowing the call stack on large images. */
+function toBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  const STEP = 0x8000;
+  for (let i = 0; i < bytes.length; i += STEP) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + STEP));
+  }
+  return btoa(bin);
+}
+
+async function callClaude(apiKey: string, model: string, image: ImageInput): Promise<ClaudeCallResult> {
   const body = {
     model,
     max_tokens: MAX_TOKENS,
@@ -152,7 +184,7 @@ async function callClaude(apiKey: string, model: string, imageUrl: string): Prom
       {
         role: "user",
         content: [
-          { type: "image", source: { type: "url", url: imageUrl } },
+          { type: "image", source: { type: "base64", media_type: image.media_type, data: image.data } },
           { type: "text", text: USER_PROMPT },
         ],
       },
@@ -173,14 +205,17 @@ async function callClaude(apiKey: string, model: string, imageUrl: string): Prom
   });
 
   if (!res.ok) {
-    let message = `Claude API ${res.status}`;
+    // Log the real error for ops; the client gets a generic message. Claude's error
+    // text can echo request details and is not something to surface in the app.
+    let detail = "";
     try {
       const err = (await res.json()) as { error?: { type?: string; message?: string } };
-      if (err.error?.message) message = `Claude API ${res.status}: ${err.error.type ?? "error"}: ${err.error.message}`;
+      detail = `${err.error?.type ?? "error"}: ${err.error?.message ?? ""}`;
     } catch {
       /* non-JSON error body */
     }
-    throw new HttpError(502, message);
+    console.error(`parse-slip: Claude API ${res.status} (${model}) ${detail}`.trim());
+    throw new HttpError(502, "the slip reader is unavailable right now, try again in a moment");
   }
 
   const data = (await res.json()) as ClaudeResponse;
@@ -203,15 +238,14 @@ async function callClaude(apiKey: string, model: string, imageUrl: string): Prom
   if (!isParsedSlip(parsed)) {
     return { parsed: null, stop_reason: "schema_mismatch", model: data.model ?? model, usage };
   }
-  return { parsed, stop_reason: data.stop_reason, model: data.model ?? model, usage };
+  return { parsed: clampConfidences(parsed), stop_reason: data.stop_reason, model: data.model ?? model, usage };
 }
 
+/** Per DECISIONS: low confidence, or refusal / max_tokens / unparseable output. Leg count is not a reason. */
 function shouldEscalate(r: ClaudeCallResult): boolean {
   if (r.stop_reason === "refusal" || r.stop_reason === "max_tokens") return true;
   if (!r.parsed) return true;
-  if (r.parsed.overall_confidence < ESCALATE_BELOW_CONFIDENCE) return true;
-  if (r.parsed.legs.length > ESCALATE_ABOVE_LEGS) return true;
-  return false;
+  return r.parsed.overall_confidence < ESCALATE_BELOW_CONFIDENCE;
 }
 
 // ---------- handler ----------
@@ -248,31 +282,50 @@ Deno.serve(async (req: Request) => {
       throw new HttpError(400, "storage_path must be inside your own folder");
     }
 
-    // 3. signed URL for the image (service role; bucket is private)
+    // 3. caller must belong to the room. Through the user client so RLS answers it.
+    const { data: membership, error: memberErr } = await userClient
+      .from("room_members")
+      .select("room_id")
+      .eq("room_id", roomId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (memberErr) {
+      console.error("parse-slip: membership check", memberErr.message);
+      throw new HttpError(500, "could not verify room membership");
+    }
+    if (!membership) throw new HttpError(403, "you are not a member of this room");
+
+    // 4. download the image (service role; bucket is private) and base64 it
     const admin = createClient(supabaseUrl, env("SUPABASE_SERVICE_ROLE_KEY"), {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const { data: signed, error: signErr } = await admin.storage
-      .from(BUCKET)
-      .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
-    if (signErr || !signed?.signedUrl) {
-      throw new HttpError(400, `could not sign image url: ${signErr?.message ?? "unknown"}`);
+    const { data: blob, error: dlErr } = await admin.storage.from(BUCKET).download(storagePath);
+    if (dlErr || !blob) {
+      console.error("parse-slip: download", dlErr?.message ?? "no data");
+      throw new HttpError(400, "could not read the uploaded image");
     }
+    if (blob.size > MAX_IMAGE_BYTES) throw new HttpError(413, "image is too large (5 MB max)");
+    const image: ImageInput = { media_type: mediaTypeFor(storagePath), data: toBase64(await blob.arrayBuffer()) };
 
-    // 4. Claude, primary then fallback
+    // 5. Propfein client first: if it is misconfigured we fail before spending Claude tokens.
+    //    propfeinFromEnv throws when PROPFEIN_API_URL is unset/mock without ALLOW_MOCK_PROPFEIN=true;
+    //    the catch below turns that into 500 propfein_not_configured.
+    const propfein = propfeinFromEnv(Deno.env.toObject());
+
+    // 6. Claude, primary then fallback
     const anthropicKey = env("ANTHROPIC_API_KEY");
     const primaryModel = Deno.env.get("PARSE_MODEL_PRIMARY") ?? "claude-haiku-5-5";
     const fallbackModel = Deno.env.get("PARSE_MODEL_FALLBACK") ?? "claude-sonnet-5-5";
 
     const usage: ClaudeUsage = { input_tokens: 0, output_tokens: 0 };
-    let result = await callClaude(anthropicKey, primaryModel, signed.signedUrl);
+    let result = await callClaude(anthropicKey, primaryModel, image);
     usage.input_tokens += result.usage.input_tokens;
     usage.output_tokens += result.usage.output_tokens;
 
     let escalated = false;
     if (shouldEscalate(result) && fallbackModel !== primaryModel) {
       escalated = true;
-      const second = await callClaude(anthropicKey, fallbackModel, signed.signedUrl);
+      const second = await callClaude(anthropicKey, fallbackModel, image);
       usage.input_tokens += second.usage.input_tokens;
       usage.output_tokens += second.usage.output_tokens;
       // keep the fallback unless it failed outright and the primary had something usable
@@ -282,12 +335,12 @@ Deno.serve(async (req: Request) => {
     if (!result.parsed) {
       if (result.stop_reason === "refusal") throw new HttpError(422, "model refused to read this image");
       if (result.stop_reason === "max_tokens") throw new HttpError(422, "slip too long to parse");
-      throw new HttpError(502, `model returned unusable output (${result.stop_reason ?? "unknown"})`);
+      console.error("parse-slip: unusable model output", result.stop_reason ?? "unknown", result.model);
+      throw new HttpError(502, "could not read this slip, try a clearer screenshot");
     }
     const parsed = result.parsed;
 
-    // 5. match each leg against Propfein
-    const propfein = propfeinFromEnv(Deno.env.toObject());
+    // 7. match each leg against Propfein
     const today = todayInNewYork();
     const matches: LegMatchOut[] = await Promise.all(
       parsed.legs.map(async (leg): Promise<LegMatchOut> => {
@@ -311,6 +364,10 @@ Deno.serve(async (req: Request) => {
   } catch (e) {
     if (e instanceof HttpError) {
       return json({ error: e.message }, e.status);
+    }
+    if (e instanceof Error && e.message.startsWith("propfein_not_configured")) {
+      console.error("parse-slip: propfein not configured", e.message);
+      return json({ error: "propfein_not_configured" }, 500);
     }
     console.error("parse-slip unhandled", e);
     return json({ error: "internal error" }, 500);

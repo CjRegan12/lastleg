@@ -53,8 +53,12 @@ join profiles p on p.id = s.user_id;
 create policy "room members can receive broadcasts"
   on realtime.messages for select to authenticated
   using (
-    realtime.topic() like 'room:%'
-    and is_room_member(substring(realtime.topic() from 6)::uuid)
+    -- guard the cast: a malformed topic must evaluate false, not raise
+    case
+      when realtime.topic() ~ '^room:[0-9a-f-]{36}$'
+        then is_room_member(substring(realtime.topic() from 6)::uuid)
+      else false
+    end
   );
 
 create or replace function broadcast_room_change()
@@ -86,8 +90,11 @@ create trigger legs_broadcast after insert or update or delete on legs
   for each row execute function broadcast_room_change();
 create trigger room_events_broadcast after insert on room_events
   for each row execute function broadcast_room_change();
-create trigger slates_broadcast after insert or update on slates
+create trigger slates_broadcast_insert after insert on slates
   for each row execute function broadcast_room_change();
+-- no-op updates (e.g. an upsert that changes nothing) must not spam the room channel
+create trigger slates_broadcast_update after update on slates
+  for each row when (old.* is distinct from new.*) execute function broadcast_room_change();
 
 -- ---------- storage: private slips bucket ----------
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

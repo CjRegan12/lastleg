@@ -13,10 +13,20 @@
  *      -> sends up to 500 rows where sent_at is null, oldest first. Use this as a
  *         cron safety net in case a webhook delivery was missed.
  *
- * Per row: look up profiles.push_token. No token -> mark sent_at now with
- * expo_receipt_status 'no_token' and skip. Otherwise build an Expo message, POST in
- * chunks of 100, record expo_ticket_id + sent_at. A ticket error of
- * DeviceNotRegistered nulls that profile's push_token.
+ * Claiming: the webhook and the drain cron can overlap, so rows are claimed
+ * atomically before anything is sent: `update notifications set sent_at = now(),
+ * expo_receipt_status = 'claimed' where id in (...) and sent_at is null returning *`.
+ * Only rows that come back from that update are sent; a row another invocation
+ * claimed first is skipped. After Expo answers, the row gets its ticket id and
+ * expo_receipt_status goes back to null (receipt pending) or to the Expo error code.
+ * If the Expo POST itself fails, the claim is released (sent_at back to null) so a
+ * later drain retries it.
+ *
+ * Per row: look up profiles.push_token. No token -> expo_receipt_status 'no_token'
+ * (sent_at stays set from the claim). A ticket error of DeviceNotRegistered nulls
+ * that profile's push_token, but only if the profile has not been updated since
+ * the claim (profiles.updated_at <= sent_at), so a token re-registered in between
+ * survives.
  *
  * Receipts are checked later by the check-receipts function.
  *
@@ -38,6 +48,9 @@ interface NotificationRow {
   url: string | null;
   sent_at: string | null;
 }
+
+const CLAIMED = "claimed";
+const NOTIFICATION_COLUMNS = "id, user_id, title, body, url, sent_at";
 
 interface WebhookPayload {
   type?: string;
@@ -64,6 +77,7 @@ interface ExpoTicket {
 interface Summary {
   mode: "webhook" | "drain";
   considered: number;
+  claimed: number;
   sent: number;
   no_token: number;
   errors: number;
@@ -139,6 +153,7 @@ Deno.serve(async (req: Request) => {
   const summary: Summary = {
     mode: "drain",
     considered: 0,
+    claimed: 0,
     sent: 0,
     no_token: 0,
     errors: 0,
@@ -147,33 +162,38 @@ Deno.serve(async (req: Request) => {
   };
 
   try {
-    // 1. collect notifications to send
-    let rows: NotificationRow[] = [];
+    // 1. candidate ids. We never trust webhook contents; the id is all we take from it.
+    let candidateIds: number[] = [];
     if (payload.type === "INSERT" && payload.table === "notifications" && payload.record?.id != null) {
       summary.mode = "webhook";
-      // Re-read the row so we never trust webhook contents blindly and skip if already sent.
-      const { data, error } = await admin
-        .from("notifications")
-        .select("id, user_id, title, body, url, sent_at")
-        .eq("id", payload.record.id)
-        .is("sent_at", null)
-        .maybeSingle();
-      if (error) throw new Error(`select notification: ${error.message}`);
-      if (data) rows = [data as NotificationRow];
+      candidateIds = [payload.record.id];
     } else {
       const { data, error } = await admin
         .from("notifications")
-        .select("id, user_id, title, body, url, sent_at")
+        .select("id")
         .is("sent_at", null)
         .order("created_at", { ascending: true })
         .limit(DRAIN_LIMIT);
       if (error) throw new Error(`select unsent: ${error.message}`);
-      rows = (data ?? []) as NotificationRow[];
+      candidateIds = ((data ?? []) as Array<{ id: number }>).map((r) => r.id);
     }
-    summary.considered = rows.length;
+    summary.considered = candidateIds.length;
+    if (candidateIds.length === 0) return json(summary);
+
+    // 2. claim atomically: only rows still unsent come back, and they are ours now.
+    const claimedAt = new Date().toISOString();
+    const { data: claimedRows, error: claimErr } = await admin
+      .from("notifications")
+      .update({ sent_at: claimedAt, expo_receipt_status: CLAIMED })
+      .in("id", candidateIds)
+      .is("sent_at", null)
+      .select(NOTIFICATION_COLUMNS);
+    if (claimErr) throw new Error(`claim notifications: ${claimErr.message}`);
+    const rows = (claimedRows ?? []) as NotificationRow[];
+    summary.claimed = rows.length;
     if (rows.length === 0) return json(summary);
 
-    // 2. push tokens
+    // 3. push tokens
     const userIds = [...new Set(rows.map((r) => r.user_id))];
     const { data: profiles, error: profErr } = await admin
       .from("profiles")
@@ -185,8 +205,7 @@ Deno.serve(async (req: Request) => {
       tokenByUser.set(p.id, p.push_token);
     }
 
-    // 3. split into sendable vs no_token
-    const now = new Date().toISOString();
+    // 4. split into sendable vs no_token
     const sendable: Array<{ row: NotificationRow; message: ExpoMessage }> = [];
     const noTokenIds: number[] = [];
     for (const row of rows) {
@@ -208,26 +227,32 @@ Deno.serve(async (req: Request) => {
     }
 
     if (noTokenIds.length > 0) {
+      // sent_at already set by the claim; just record why nothing went out
       const { error } = await admin
         .from("notifications")
-        .update({ sent_at: now, expo_receipt_status: "no_token" })
+        .update({ expo_receipt_status: "no_token" })
         .in("id", noTokenIds);
       if (error) throw new Error(`mark no_token: ${error.message}`);
       summary.no_token = noTokenIds.length;
     }
 
-    // 4. send in chunks of 100
+    // 5. send in chunks of 100
     const deadTokens = new Set<string>();
     for (const batch of chunk(sendable, CHUNK)) {
       let tickets: ExpoTicket[];
       try {
         tickets = await postExpo(batch.map((b) => b.message));
       } catch (e) {
-        // whole chunk failed; leave sent_at null so a later drain retries it
+        // whole chunk failed: release the claim so a later drain retries it
         const msg = e instanceof Error ? e.message : String(e);
+        const { error: relErr } = await admin
+          .from("notifications")
+          .update({ sent_at: null, expo_receipt_status: null })
+          .in("id", batch.map((b) => b.row.id))
+          .eq("expo_receipt_status", CLAIMED);
         for (const b of batch) {
           summary.errors += 1;
-          summary.failures.push({ notification_id: b.row.id, error: msg });
+          summary.failures.push({ notification_id: b.row.id, error: relErr ? `${msg}; release failed: ${relErr.message}` : msg });
         }
         continue;
       }
@@ -239,15 +264,18 @@ Deno.serve(async (req: Request) => {
         const sentAt = new Date().toISOString();
 
         if (!ticket) {
+          // Expo gave us nothing for this slot; record it rather than resend blindly
           summary.errors += 1;
           summary.failures.push({ notification_id: row.id, error: "no ticket returned" });
+          await admin.from("notifications").update({ expo_receipt_status: "no_ticket" }).eq("id", row.id);
           continue;
         }
 
         if (ticket.status === "ok") {
+          // receipt pending: status back to null so check-receipts picks it up
           const { error } = await admin
             .from("notifications")
-            .update({ sent_at: sentAt, expo_ticket_id: ticket.id ?? null })
+            .update({ sent_at: sentAt, expo_ticket_id: ticket.id ?? null, expo_receipt_status: null })
             .eq("id", row.id);
           if (error) {
             summary.errors += 1;
@@ -270,12 +298,14 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // 5. clear dead tokens
+    // 6. clear dead tokens. Match on the exact token that failed, and only if the
+    //    profile has not been touched since we claimed (a fresh registration wins).
     if (deadTokens.size > 0) {
       const { data: cleared, error } = await admin
         .from("profiles")
         .update({ push_token: null })
         .in("push_token", [...deadTokens])
+        .lte("updated_at", claimedAt)
         .select("id");
       if (error) {
         summary.failures.push({ notification_id: -1, error: `clear tokens: ${error.message}` });

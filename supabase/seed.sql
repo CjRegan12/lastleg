@@ -2,7 +2,8 @@
 -- Run after migrations on a dev project: `supabase db reset` applies it automatically.
 -- Uses the mock Propfein event ids so the grader in mock mode grades these.
 
--- Two auth users (dev only; passwords are "password123")
+-- Two auth users. These seed users exist for the RLS tests and SQL-only poking;
+-- they are not meant for signing in. Sign in through the app with real auth.
 insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
 values
   ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'cj@example.com',
@@ -12,7 +13,7 @@ values
 on conflict (id) do nothing;
 
 -- profiles are created by the on_auth_user_created trigger; set nicer handles
-update profiles set handle = 'cj', age_confirmed_at = now() where id = '00000000-0000-0000-0000-000000000001';
+update profiles set handle = 'cjr', age_confirmed_at = now() where id = '00000000-0000-0000-0000-000000000001';
 update profiles set handle = 'mike', age_confirmed_at = now() where id = '00000000-0000-0000-0000-000000000002';
 
 -- room
@@ -67,6 +68,6 @@ insert into legs (slip_id, room_id, sport, market, selection, line, player_name,
 
 -- room events for the ticker
 insert into room_events (room_id, slate_id, slip_id, type, payload) values
-  ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000003', 'cashed', '{"handle":"mike","payout":72.00}'),
-  ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000004', 'slip_dead', '{"handle":"cj","payout":260.00,"lost_leg":"Stephen Curry Over 7.5 Threes"}'),
-  ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'one_away', '{"handle":"cj","payout":175.00,"last_leg":"Jalen Hurts Over 1.5 Total TDs"}');
+  ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000003', 'cashed', '{"handle":"mike","potential_payout":72.00}'),
+  ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000004', 'slip_dead', '{"handle":"cjr","potential_payout":260.00,"lost_leg":"Stephen Curry Over 7.5 Threes"}'),
+  ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'one_away', '{"handle":"cjr","potential_payout":175.00,"last_leg":"Jalen Hurts Over 1.5 Total TDs"}');

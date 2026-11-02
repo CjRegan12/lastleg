@@ -2,13 +2,20 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { SlipCardLeg } from "@/components/SlipCard";
 import type { RoomEvent, Slate, SlateBoardRow } from "@/lib/database.types";
+import { todayNY } from "@/lib/format";
 import { useRoomChannel } from "@/lib/realtime";
 import { supabase } from "@/lib/supabase";
 
 /**
  * Board data for one room + slate date. Loads via REST, then refetches the
  * affected table when a Broadcast arrives (simple and correct; the board is
- * small). ensure_slate runs on every load so "today" always exists.
+ * small).
+ *
+ * Slate rows: ensure_slate runs only on initial load / date change, and only
+ * for today or future dates, so "today" always exists but browsing back never
+ * manufactures empty past slates (those are a plain select; none -> empty
+ * board). A `slates` broadcast carries the whole row, so we apply it directly
+ * instead of calling ensure_slate again.
  */
 export function useSlateBoard(roomId: string | null | undefined, slateDate: string) {
   const [slate, setSlate] = useState<Slate | null>(null);
@@ -20,6 +27,23 @@ export function useSlateBoard(roomId: string | null | undefined, slateDate: stri
 
   const loadSlate = useCallback(async (): Promise<Slate | null> => {
     if (!roomId) return null;
+    const isPast = slateDate < todayNY();
+
+    if (isPast) {
+      const { data, error: err } = await supabase
+        .from("slates")
+        .select("*")
+        .eq("room_id", roomId)
+        .eq("slate_date", slateDate)
+        .maybeSingle();
+      if (err) {
+        setError(err.message);
+        return null;
+      }
+      setSlate(data ?? null);
+      return data ?? null;
+    }
+
     const { data, error: err } = await supabase.rpc("ensure_slate", {
       p_room_id: roomId,
       p_date: slateDate,
@@ -77,7 +101,14 @@ export function useSlateBoard(roomId: string | null | undefined, slateDate: stri
     setLoading(true);
     setError(null);
     const s = await loadSlate();
-    if (s) await Promise.all([loadSlips(s.id), loadEvents(s.id)]);
+    if (s) {
+      await Promise.all([loadSlips(s.id), loadEvents(s.id)]);
+    } else {
+      // no slate for this date (past day nobody posted on): empty board
+      setSlips([]);
+      setLegsBySlip({});
+      setEvents([]);
+    }
     setLoading(false);
   }, [loadSlate, loadSlips, loadEvents]);
 
@@ -86,13 +117,27 @@ export function useSlateBoard(roomId: string | null | undefined, slateDate: stri
   }, [refresh]);
 
   useRoomChannel(roomId, (table, _op, record) => {
+    if (table === "slates") {
+      // A slate row changed (open -> live -> final, or a new slate for this date).
+      // The broadcast carries the full row; no need to hit ensure_slate again.
+      if (!record) return;
+      const rec = record as unknown as Slate;
+      if (slate ? rec.id === slate.id : rec.slate_date === slateDate && rec.room_id === roomId) {
+        setSlate(rec);
+        if (!slate) {
+          // a slate appeared for the date we are looking at: pull its board
+          loadSlips(rec.id);
+          loadEvents(rec.id);
+        }
+      }
+      return;
+    }
     if (!slate) return;
     const recSlate = record?.slate_id;
     // broadcasts carry the whole row; skip rows for other slates when we can tell
     if (recSlate && recSlate !== slate.id) return;
     if (table === "slips" || table === "legs") loadSlips(slate.id);
     else if (table === "room_events") loadEvents(slate.id);
-    else if (table === "slates") loadSlate();
   });
 
   const totals = useMemo(() => {

@@ -53,11 +53,23 @@ begin
   base := left(base, 18);
   if length(base) < 3 then base := base || 'user'; end if;
   candidate := base;
-  while exists (select 1 from profiles where handle = candidate) loop
+  -- handle is citext; cast so the comparison is case-insensitive instead of text = text
+  while exists (select 1 from profiles where handle = candidate::citext) loop
     n := n + 1;
     candidate := base || n::text;
   end loop;
-  insert into profiles (id, handle) values (new.id, candidate);
+  -- two signups can race past the exists() check; retry on unique_violation
+  for attempt in 1..5 loop
+    begin
+      insert into profiles (id, handle) values (new.id, candidate::citext);
+      return new;
+    exception when unique_violation then
+      if attempt = 5 then
+        raise exception 'could not allocate a unique handle for user %', new.id;
+      end if;
+      candidate := left(base, 21) || lpad(floor(random() * 1000)::int::text, 3, '0');
+    end;
+  end loop;
   return new;
 end;
 $$;
@@ -207,6 +219,7 @@ create table notifications (
   user_id uuid not null references profiles(id) on delete cascade,
   room_id uuid references rooms(id) on delete cascade,
   slate_id uuid references slates(id) on delete cascade,
+  slip_id uuid references slips(id) on delete cascade,
   type notification_type not null,
   title text not null,
   body text not null,
@@ -218,6 +231,10 @@ create table notifications (
 );
 create index notifications_unsent_idx on notifications(created_at) where sent_at is null;
 create index notifications_room_slate_idx on notifications(room_id, slate_id);
+-- overlapping grader runs may both try to push the same slip event; the second insert fails here
+create unique index notifications_dedupe_idx
+  on notifications(user_id, slate_id, type, slip_id)
+  where slip_id is not null;
 
 -- ---------- updated_at ----------
 create or replace function set_updated_at()

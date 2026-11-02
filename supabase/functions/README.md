@@ -16,19 +16,29 @@ Set once per project (never in the repo):
 ```sh
 supabase secrets set \
   ANTHROPIC_API_KEY=sk-ant-... \
-  PROPFEIN_API_URL=mock \
+  PROPFEIN_API_URL=https://api.propfein.app \
   PROPFEIN_API_KEY=... \
   GRADER_SECRET=$(openssl rand -hex 32) \
   WEBHOOK_SECRET=$(openssl rand -hex 32) \
   EXPO_ACCESS_TOKEN=...
 ```
 
-- `PROPFEIN_API_URL=mock` runs the Propfein client against fixtures. Switch to the real URL when the API exists.
+### Propfein fails closed
+
+`grade-legs` and `parse-slip` refuse to run against fixtures unless you say so explicitly:
+
+- `PROPFEIN_API_URL` unset, or set to `mock`, **without** `ALLOW_MOCK_PROPFEIN=true` -> `grade-legs` returns `500 { ok: false, error: "propfein_not_configured" }` before touching the database, and `parse-slip` returns `500 { error: "propfein_not_configured" }` before calling Claude. `propfeinFromEnv()` (both `lib/api/propfein.ts` and `_shared/propfein.ts`) throws the same way.
+- For local dev and the mock seed, set both: `PROPFEIN_API_URL=mock` and `ALLOW_MOCK_PROPFEIN=true` (in `supabase/functions/.env.local`, or via `supabase secrets set` on a dev project).
+- Never set `ALLOW_MOCK_PROPFEIN` on the production project. A grader silently grading real slips against fixtures is the failure mode this exists to prevent.
 - `EXPO_ACCESS_TOKEN` is optional until Expo push security is turned on for the project.
 - Optional parse overrides: `PARSE_MODEL_PRIMARY` (default `claude-haiku-5-5`), `PARSE_MODEL_FALLBACK` (default `claude-sonnet-5-5`).
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` are injected automatically.
 
 Check what is set with `supabase secrets list` (values are not shown).
+
+## Notification dedupe
+
+`notifications` has a unique index on `(user_id, slate_id, type, slip_id) where slip_id is not null` (`notifications_dedupe_idx`). Two overlapping `grade-legs` runs that both decide the same slip is one away insert the same `(user, slate, one_away, slip)` row; the second insert fails with Postgres `23505` and the grader counts it as `notifications_deduped`, not an error. Recaps have `slip_id = null` and are not covered by the index; they are protected by the `update slates ... where status in ('open','live') returning id` guard instead (only the run that flips the slate sends them). `send-push` adds its own guard on top: rows are claimed with `update ... where sent_at is null returning *` before anything is sent, so the webhook and the drain cron cannot double-send.
 
 ## Deploy
 
@@ -111,7 +121,7 @@ curl -sS -X POST http://127.0.0.1:54321/functions/v1/parse-slip \
   -d '{"storage_path":"'"$USER_ID"'/test.jpg","room_id":"00000000-0000-0000-0000-000000000000"}'
 ```
 
-Response: `{ parsed, matches, model_used, escalated, usage }`. 400 bad body or path outside your folder, 401 no user, 422 model refused, 502 Claude API error.
+Response: `{ parsed, matches, model_used, escalated, usage }`. 400 bad body, path outside your folder or unreadable image, 401 no user, 403 not a member of `room_id`, 413 image over 5 MB, 422 model refused, 502 Claude API error (generic message; the real error is in the function logs). The image is downloaded with the service role and sent to Claude as base64, so this works locally without a public Storage URL.
 
 ### send-push
 
@@ -150,6 +160,8 @@ curl -sS -X POST http://127.0.0.1:54321/functions/v1/grade-legs \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
+
+Needs `PROPFEIN_API_URL=mock` plus `ALLOW_MOCK_PROPFEIN=true` in `.env.local` or it returns `500 propfein_not_configured`. The summary includes `legs_raced` (legs another run or an override moved first; skipped), `notifications_deduped` (unique-index hits) and `slates_forced` (slates older than 7 days closed out with their open legs parked as `needs_review`).
 
 ## Logs
 
