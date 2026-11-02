@@ -52,19 +52,31 @@ class LargeSecureStore {
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
 const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
 
-if (!supabaseUrl || !supabaseKey) {
-  console.warn(
-    "[supabase] EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY are not set. Copy .env.example to .env.",
+/**
+ * True when both EXPO_PUBLIC_SUPABASE_* values were inlined at bundle time.
+ * createClient("") throws synchronously, which in a release build is an instant
+ * crash with no UI. Never throw here: fall back to a placeholder client and let
+ * the root layout render a readable error screen (see app/_layout.tsx).
+ */
+export const supabaseConfigured = Boolean(supabaseUrl && supabaseKey);
+
+if (!supabaseConfigured) {
+  console.error(
+    "[supabase] EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY were not set at bundle time. Local: copy .env.example to .env. CI: check the `lastleg` env group in codemagic.yaml.",
   );
 }
 
-export const supabase: SupabaseClient<Database> = createClient<Database>(supabaseUrl, supabaseKey, {
-  auth: {
-    storage: new LargeSecureStore(),
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
+export const supabase: SupabaseClient<Database> = createClient<Database>(
+  supabaseConfigured ? supabaseUrl : "https://not-configured.invalid",
+  supabaseConfigured ? supabaseKey : "not-configured",
+  {
+    auth: {
+      storage: new LargeSecureStore(),
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
   },
-});
+);
 
 export type { Database };

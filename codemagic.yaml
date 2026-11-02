@@ -61,6 +61,17 @@ workflows:
           - "scripts/**"
           - "lib/grading/*.test.ts"
     scripts:
+      - name: Check app config
+        script: |
+          # The app inlines these at bundle time. Missing values used to ship a build
+          # that crashed on launch (createClient("") throws). Fail here instead, and
+          # write them to .env so expo export:embed picks them up regardless of how
+          # Xcode's run-script phase inherits the shell environment.
+          : "${EXPO_PUBLIC_SUPABASE_URL:?missing: add it to the lastleg env group in Codemagic}"
+          : "${EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY:?missing: add it to the lastleg env group in Codemagic}"
+          printf 'EXPO_PUBLIC_SUPABASE_URL=%s\nEXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=%s\n' \
+            "$EXPO_PUBLIC_SUPABASE_URL" "$EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY" > .env
+          echo "Supabase URL: $EXPO_PUBLIC_SUPABASE_URL"
       - name: Install
         script: |
           npm ci --no-audit --no-fund --legacy-peer-deps
