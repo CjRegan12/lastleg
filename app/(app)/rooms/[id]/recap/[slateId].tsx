@@ -1,6 +1,6 @@
 import * as Sharing from "expo-sharing";
 import { useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import ViewShot from "react-native-view-shot";
 
@@ -28,7 +28,7 @@ export default function RecapScreen() {
   const { id: roomId, slateId } = useLocalSearchParams<{ id: string; slateId: string }>();
   const [recap, setRecap] = useState<Recap | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const shotRef = useRef<ViewShot>(null);
+  const shotRef = useRef<React.ComponentRef<typeof ViewShot>>(null);
 
   const load = useCallback(async () => {
     if (!roomId || !slateId) return;

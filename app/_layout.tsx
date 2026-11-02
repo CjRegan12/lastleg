@@ -14,7 +14,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.fill}>
       <SafeAreaProvider>
         <AuthProvider>
-          <StatusBar style="light" backgroundColor={colors.bg} />
+          <StatusBar style="light" />
           <RootNavigator />
         </AuthProvider>
       </SafeAreaProvider>

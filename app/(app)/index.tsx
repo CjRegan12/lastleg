@@ -117,7 +117,7 @@ export default function RoomsScreen() {
           </View>
         }
         ListEmptyComponent={
-          loading ? null : (
+          loading ? undefined : (
             <EmptyState
               title="No rooms yet"
               body="Make one for your group chat and send them the code. Everyone drops their slips, the board grades itself."

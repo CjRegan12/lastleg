@@ -146,7 +146,6 @@ const PLAYER_ALIASES: Record<string, { event: string; player_id: string; team_id
 
 export function mockMatch(req: LegMatchRequest): LegMatchResponse {
   const text = `${req.selection} ${(req.teams ?? []).join(" ")} ${req.player ?? ""}`.toLowerCase();
-  const isOver = /\bover\b|\bo\s?\d/.test(text);
   const isUnder = /\bunder\b|\bu\s?\d/.test(text);
 
   if (req.market === "player_prop") {

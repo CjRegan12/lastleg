@@ -121,7 +121,7 @@ export default function RoomBoardScreen() {
           </View>
         }
         ListEmptyComponent={
-          loading ? null : (
+          loading ? undefined : (
             <EmptyState
               title={isToday ? "Nobody has dropped a slip yet" : "No slips on this slate"}
               body={
