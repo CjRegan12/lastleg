@@ -1,7 +1,7 @@
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -9,6 +9,24 @@ import { colors } from "@/constants/theme";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { useNotificationDeepLinks } from "@/lib/notifications";
 import { supabaseConfigured } from "@/lib/supabase";
+
+// Expo Router mounts this as a React error boundary around the whole tree. On the
+// new architecture a throw during render otherwise goes straight to the native
+// fatal path (RCTFatal -> SIGABRT), skipping ErrorUtils and any try/catch at the
+// entry point. This is the only hook that turns such a throw into a screen.
+export function ErrorBoundary({ error, retry }: { error: Error; retry: () => Promise<void> }) {
+  const stack = error.stack ? String(error.stack).split("\n").slice(0, 10).join("\n") : "";
+  return (
+    <ScrollView style={styles.fill} contentContainerStyle={styles.errScroll}>
+      <Text style={styles.errTitle}>Last Leg hit an error</Text>
+      <Text style={styles.errBody}>{error.message || String(error)}</Text>
+      {stack ? <Text style={styles.errStack}>{stack}</Text> : null}
+      <Pressable onPress={() => void retry()} style={styles.errButton}>
+        <Text style={styles.errButtonText}>Try again</Text>
+      </Pressable>
+    </ScrollView>
+  );
+}
 
 export default function RootLayout() {
   if (!supabaseConfigured) {
@@ -40,17 +58,15 @@ function RootNavigator() {
   const router = useRouter();
 
   const inAuthGroup = segments[0] === "(auth)";
-  // app/join/[code] is reachable signed out (deep link); it handles its own gate
-  const onPublicJoin = segments[0] === "join";
+  // Signed-out gating lives in app/(app)/_layout.tsx (render-time Redirect).
+  // app/join/[code] is reachable signed out (deep link); it handles its own gate.
 
   useEffect(() => {
     if (loading) return;
-    if (!session && !inAuthGroup && !onPublicJoin) {
-      router.replace("/(auth)/sign-in" as never);
-    } else if (session && inAuthGroup) {
+    if (session && inAuthGroup) {
       router.replace("/(app)" as never);
     }
-  }, [session, loading, inAuthGroup, onPublicJoin, router]);
+  }, [session, loading, inAuthGroup, router]);
 
   useNotificationDeepLinks(!!session);
 
@@ -82,4 +98,15 @@ const styles = StyleSheet.create({
   splash: { flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center", padding: 24 },
   errTitle: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 8, textAlign: "center" },
   errBody: { color: colors.muted, fontSize: 14, textAlign: "center", lineHeight: 20 },
+  errScroll: { padding: 24, paddingTop: 80, alignItems: "stretch" },
+  errStack: { color: colors.muted, fontSize: 11, fontFamily: "Menlo", lineHeight: 16, marginTop: 16 },
+  errButton: {
+    marginTop: 24,
+    alignSelf: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: colors.live,
+  },
+  errButtonText: { color: colors.bg, fontWeight: "700", fontSize: 15 },
 });

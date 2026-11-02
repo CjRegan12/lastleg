@@ -1,8 +1,16 @@
-import { Stack } from "expo-router";
+import { Redirect, Stack } from "expo-router";
 
 import { colors } from "@/constants/theme";
+import { useAuth } from "@/lib/auth";
 
 export default function AppLayout() {
+  const { session, loading } = useAuth();
+  // Gate in render, not in an effect: every (app) screen calls useUserId(), which
+  // throws without a session. An effect-based redirect in the root layout runs
+  // after the first render, so on a fresh install (app)/index rendered once with
+  // no session and the throw was fatal in release (RCTFatal, no error boundary).
+  if (loading) return null;
+  if (!session) return <Redirect href={"/(auth)/sign-in" as never} />;
   return (
     <Stack
       screenOptions={{
