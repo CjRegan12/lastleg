@@ -13,6 +13,9 @@ Mirror of the Decisions table in the Last Leg Build Plan (Claude Doc). This file
 | Slip parsing | Screenshot -> private Storage -> Edge Function `parse-slip` -> Claude Haiku 5.5 JSON schema output, escalate to Sonnet 5.5 on low confidence |
 | Push | expo-notifications; `notifications` table -> webhook -> Edge Function `send-push` -> fetch to exp.host |
 | Auth | Sign in with Apple only in v1 (Supabase Apple provider, client id io.lastleg.app). Phone OTP parked until there are users (needs a paid SMS provider); helpers kept in lib/auth.tsx. Email magic link for dev. Decided 2026-11-02. |
+| Navigation | 4 tabs + floating center "+" (add slip from anywhere, pick room after). Live (all your unsettled legs across rooms, sorted closest-to-cashing; push landing surface), Rooms, Community (weekly leaderboard across people in your rooms + friends feed of graded slips with one-tap reactions; nothing public, no strangers), You (W-L-P, profit, ROI with week/month/all, slip history, stats by book and parlay size, settings). No tips/articles, no public feed, no public profiles in v1. Decided 2026-11-02. |
+| Record and profit | win = payout - stake; loss = -stake; push/void = 0 and excluded from staked total; pending excluded. ROI = profit / staked over win+loss slips. Unknown stake: counts for record, profit shows "based on N of M slips" and the slip is flagged "add stake". Never invent a stake. Leg hit rate shown as secondary stat. |
+| Visual design | DESIGN.md is the source: amber (#FFB020) is the brand and the one-leg-away color only; ink #0A0B0D; Barlow + Barlow Condensed; sentence case, no all-caps labels, no gradients; the amber glow is the only shadow. |
 | Tail link | Plain sportsbook URLs in v1; no affiliate tags |
 | App Store | LLC/Organization enrollment, 18+ override, US only, 21+ gate, RG footer |
 | Not in v1 | Account sync (SharpSports), live player stats, premium, Android, chat beyond reactions, books beyond DK + FanDuel |

@@ -1,6 +1,6 @@
 import { StyleSheet, Text, TextInput, type TextInputProps, View, type ViewStyle } from "react-native";
 
-import { colors, fontSize, radius, spacing } from "@/constants/theme";
+import { colors, fonts, fontSize, radius, spacing } from "@/constants/theme";
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -17,8 +17,8 @@ export function Input({ label, hint, error, warn, containerStyle, style, ...rest
     <View style={[styles.wrap, containerStyle]}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <TextInput
-        placeholderTextColor={colors.muted}
-        selectionColor={colors.live}
+        placeholderTextColor={colors.pending}
+        selectionColor={colors.text}
         keyboardAppearance="dark"
         {...rest}
         style={[styles.input, { borderColor }, style]}
@@ -34,16 +34,17 @@ export function Input({ label, hint, error, warn, containerStyle, style, ...rest
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: spacing.md },
-  label: { color: colors.muted, fontSize: fontSize.sm, marginBottom: spacing.xs, fontWeight: "500" },
+  label: { fontFamily: fonts.bodyMedium, color: colors.muted, fontSize: fontSize.sm, marginBottom: spacing.xs },
   input: {
-    minHeight: 48,
+    minHeight: 50,
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
     borderWidth: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceRaised,
     color: colors.text,
-    fontSize: fontSize.md,
+    fontFamily: fonts.body,
+    fontSize: fontSize.md + 1,
   },
-  hint: { color: colors.muted, fontSize: fontSize.xs, marginTop: spacing.xs },
-  error: { color: colors.lost, fontSize: fontSize.xs, marginTop: spacing.xs },
+  hint: { fontFamily: fonts.body, color: colors.muted, fontSize: fontSize.xs, marginTop: spacing.xs },
+  error: { fontFamily: fonts.body, color: colors.lost, fontSize: fontSize.xs, marginTop: spacing.xs },
 });

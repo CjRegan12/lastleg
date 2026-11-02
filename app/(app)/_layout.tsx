@@ -1,6 +1,6 @@
 import { Redirect, Stack } from "expo-router";
 
-import { colors } from "@/constants/theme";
+import { colors, fonts } from "@/constants/theme";
 import { useAuth } from "@/lib/auth";
 
 export default function AppLayout() {
@@ -16,20 +16,21 @@ export default function AppLayout() {
       screenOptions={{
         headerStyle: { backgroundColor: colors.bg },
         headerTintColor: colors.text,
-        headerTitleStyle: { color: colors.text, fontWeight: "700" },
+        headerTitleStyle: { color: colors.text, fontFamily: fonts.condensedBold, fontSize: 22 },
         headerShadowVisible: false,
         headerBackButtonDisplayMode: "minimal",
         contentStyle: { backgroundColor: colors.bg },
       }}
     >
-      <Stack.Screen name="index" options={{ title: "Rooms" }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="pick-room" options={{ title: "Which room?", presentation: "modal" }} />
       <Stack.Screen name="rooms/new" options={{ title: "New room", presentation: "modal" }} />
       <Stack.Screen name="join" options={{ title: "Join a room", presentation: "modal" }} />
       <Stack.Screen name="rooms/[id]/index" options={{ title: "" }} />
       <Stack.Screen name="rooms/[id]/slip/[slipId]" options={{ title: "Slip" }} />
       <Stack.Screen name="rooms/[id]/recap/[slateId]" options={{ title: "Recap" }} />
       <Stack.Screen name="add-slip" options={{ title: "Add slip", presentation: "modal" }} />
-      <Stack.Screen name="profile" options={{ title: "Profile" }} />
+      <Stack.Screen name="profile" options={{ title: "Settings" }} />
     </Stack>
   );
 }

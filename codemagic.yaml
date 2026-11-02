@@ -75,7 +75,11 @@ workflows:
           echo "Supabase URL: $EXPO_PUBLIC_SUPABASE_URL"
       - name: Install
         script: |
-          npm ci --no-audit --no-fund --legacy-peer-deps
+          # npm ci is the normal path. When package.json gained a dependency in a
+          # session without npm (lockfile out of sync) it fails fast; fall back to
+          # npm install so the build still ships. Run `npm install` locally and
+          # commit package-lock.json to get back on the deterministic path.
+          npm ci --no-audit --no-fund --legacy-peer-deps || npm install --no-audit --no-fund --legacy-peer-deps
       - name: Typecheck and grading tests
         script: |
           npm run typecheck

@@ -1,6 +1,6 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { colors, fontSize, radius, spacing } from "@/constants/theme";
+import { colors, fonts, fontSize, radius, spacing } from "@/constants/theme";
 
 interface SegmentedProps<T extends string> {
   options: readonly T[];
@@ -68,6 +68,6 @@ const styles = StyleSheet.create({
   },
   itemScroll: { flex: 0, paddingHorizontal: spacing.md },
   itemActive: { backgroundColor: colors.surfaceRaised },
-  label: { color: colors.muted, fontSize: fontSize.sm, fontWeight: "600" },
+  label: { fontFamily: fonts.bodyMedium, color: colors.muted, fontSize: fontSize.sm },
   labelActive: { color: colors.text },
 });

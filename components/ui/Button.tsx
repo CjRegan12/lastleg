@@ -1,6 +1,7 @@
+import * as Haptics from "expo-haptics";
 import { ActivityIndicator, Pressable, StyleSheet, Text, type ViewStyle } from "react-native";
 
-import { colors, fontSize, radius, spacing } from "@/constants/theme";
+import { colors, fonts, fontSize, radius, spacing } from "@/constants/theme";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "md" | "sm";
@@ -15,6 +16,10 @@ interface ButtonProps {
   style?: ViewStyle;
 }
 
+/**
+ * Primary is light-on-ink (the brand amber is reserved for one-leg-away).
+ * Secondary is a bordered surface; ghost is text only; danger is red.
+ */
 export function Button({
   title,
   onPress,
@@ -27,23 +32,26 @@ export function Button({
   const inactive = disabled || loading;
   const bg =
     variant === "primary"
-      ? colors.live
+      ? colors.text
       : variant === "danger"
         ? colors.lost
         : variant === "secondary"
           ? colors.surfaceRaised
           : "transparent";
-  const fg = variant === "primary" || variant === "danger" ? colors.white : colors.text;
+  const fg = variant === "primary" ? colors.bg : variant === "danger" ? colors.white : colors.text;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled: inactive }}
-      onPress={onPress}
+      onPress={() => {
+        Haptics.selectionAsync().catch(() => undefined);
+        onPress();
+      }}
       disabled={inactive}
       style={({ pressed }) => [
         styles.base,
         size === "sm" && styles.sm,
-        { backgroundColor: bg, opacity: inactive ? 0.5 : pressed ? 0.8 : 1 },
+        { backgroundColor: bg, opacity: inactive ? 0.45 : pressed ? 0.75 : 1 },
         variant === "secondary" && styles.outlined,
         style,
       ]}
@@ -59,7 +67,7 @@ export function Button({
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 48,
+    minHeight: 50,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.md,
     alignItems: "center",
@@ -67,6 +75,6 @@ const styles = StyleSheet.create({
   },
   sm: { minHeight: 36, paddingHorizontal: spacing.md },
   outlined: { borderWidth: 1, borderColor: colors.border },
-  label: { fontSize: fontSize.md, fontWeight: "600" },
+  label: { fontFamily: fonts.bodySemi, fontSize: fontSize.md + 1 },
   labelSm: { fontSize: fontSize.sm },
 });

@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View, type ViewStyle } from "react-native";
 
-import { colors } from "@/constants/theme";
+import { colors, fonts } from "@/constants/theme";
 import { initials } from "@/lib/format";
 
 interface AvatarProps {
@@ -59,7 +59,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.bg,
   },
-  text: { color: colors.text, fontWeight: "700" },
+  text: { color: colors.text, fontFamily: fonts.condensedBold },
   stack: { flexDirection: "row", alignItems: "center" },
   extra: { color: colors.muted, fontSize: 12, marginLeft: 6 },
 });

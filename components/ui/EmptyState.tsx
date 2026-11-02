@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
-import { colors, fontSize, spacing } from "@/constants/theme";
+import { colors, spacing } from "@/constants/theme";
+
+import { T } from "./Text";
 
 interface EmptyStateProps {
   title: string;
@@ -9,25 +11,26 @@ interface EmptyStateProps {
   action?: ReactNode;
 }
 
+/** An empty screen is an invitation to act: title says what's missing, body says what to do. */
 export function EmptyState({ title, body, action }: EmptyStateProps) {
   return (
     <View style={styles.wrap}>
-      <Text style={styles.title}>{title}</Text>
-      {body ? <Text style={styles.body}>{body}</Text> : null}
+      <T variant="title" style={styles.title}>
+        {title}
+      </T>
+      {body ? (
+        <T variant="body" style={styles.body}>
+          {body}
+        </T>
+      ) : null}
       {action ? <View style={styles.action}>{action}</View> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: "center", paddingVertical: spacing.xxl * 2, paddingHorizontal: spacing.xl },
-  title: { color: colors.text, fontSize: fontSize.lg, fontWeight: "700", textAlign: "center" },
-  body: {
-    color: colors.muted,
-    fontSize: fontSize.md,
-    textAlign: "center",
-    marginTop: spacing.sm,
-    lineHeight: 21,
-  },
+  wrap: { paddingVertical: spacing.xxl * 2, paddingHorizontal: spacing.xs },
+  title: { textAlign: "left" },
+  body: { color: colors.muted, marginTop: spacing.sm, maxWidth: 320 },
   action: { marginTop: spacing.xl, alignSelf: "stretch" },
 });

@@ -1,10 +1,10 @@
 import { StyleSheet, Text, View, type ViewStyle } from "react-native";
 
-import { colors, fontSize, radius, spacing } from "@/constants/theme";
+import { colors, fonts, fontSize, radius, spacing } from "@/constants/theme";
 
 interface BadgeProps {
   label: string;
-  /** Border and text color. Background is a tinted version. */
+  /** Text color. Background is a tinted version unless solid. */
   color?: string;
   solid?: boolean;
   style?: ViewStyle;
@@ -12,14 +12,8 @@ interface BadgeProps {
 
 export function Badge({ label, color = colors.muted, solid = false, style }: BadgeProps) {
   return (
-    <View
-      style={[
-        styles.badge,
-        { borderColor: color, backgroundColor: solid ? color : `${color}22` },
-        style,
-      ]}
-    >
-      <Text style={[styles.text, { color: solid ? colors.black : color }]} numberOfLines={1}>
+    <View style={[styles.badge, { backgroundColor: solid ? color : `${color}1F` }, style]}>
+      <Text style={[styles.text, { color: solid ? colors.bg : color }]} numberOfLines={1}>
         {label}
       </Text>
     </View>
@@ -29,10 +23,9 @@ export function Badge({ label, color = colors.muted, solid = false, style }: Bad
 const styles = StyleSheet.create({
   badge: {
     paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: radius.pill,
-    borderWidth: 1,
     alignSelf: "flex-start",
   },
-  text: { fontSize: fontSize.xs, fontWeight: "700", letterSpacing: 0.3 },
+  text: { fontFamily: fonts.bodySemi, fontSize: fontSize.xs + 1 },
 });

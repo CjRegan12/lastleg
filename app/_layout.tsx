@@ -1,4 +1,6 @@
+import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -28,7 +30,27 @@ export function ErrorBoundary({ error, retry }: { error: Error; retry: () => Pro
   );
 }
 
+// Keep the splash up until fonts are in (or failed). Never let this throw.
+SplashScreen.preventAutoHideAsync().catch(() => undefined);
+
+const FONTS = {
+  "Barlow-Regular": require("../assets/fonts/Barlow-Regular.ttf"),
+  "Barlow-Medium": require("../assets/fonts/Barlow-Medium.ttf"),
+  "Barlow-SemiBold": require("../assets/fonts/Barlow-SemiBold.ttf"),
+  "BarlowCondensed-SemiBold": require("../assets/fonts/BarlowCondensed-SemiBold.ttf"),
+  "BarlowCondensed-Bold": require("../assets/fonts/BarlowCondensed-Bold.ttf"),
+};
+
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts(FONTS);
+  const fontsSettled = fontsLoaded || !!fontError;
+
+  useEffect(() => {
+    if (fontsSettled) SplashScreen.hideAsync().catch(() => undefined);
+  }, [fontsSettled]);
+
+  if (!fontsSettled) return null;
+
   if (!supabaseConfigured) {
     return (
       <View style={styles.splash}>

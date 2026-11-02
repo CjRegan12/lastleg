@@ -5,7 +5,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { RGFooter } from "@/components/RGFooter";
 import { Button, Input, Screen } from "@/components/ui";
 import { APP_NAME } from "@/constants/books";
-import { colors, fontSize, radius, spacing } from "@/constants/theme";
+import { colors, fonts, fontSize, radius, spacing } from "@/constants/theme";
 import { confirmAge, useAuth } from "@/lib/auth";
 
 // Phone OTP is parked until there are users (needs a paid SMS provider in
@@ -113,8 +113,8 @@ export default function SignInScreen() {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   hero: { paddingTop: spacing.xxl * 2, paddingBottom: spacing.xxl, alignItems: "center" },
-  logo: { color: colors.text, fontSize: fontSize.xxl, fontWeight: "800", letterSpacing: -0.5 },
-  tagline: { color: colors.muted, fontSize: fontSize.md, marginTop: spacing.sm, textAlign: "center" },
+  logo: { color: colors.text, fontFamily: fonts.condensedBold, fontSize: 56, lineHeight: 58, letterSpacing: -1 },
+  tagline: { color: colors.muted, fontFamily: fonts.body, fontSize: fontSize.lg, lineHeight: 24, marginTop: spacing.sm, textAlign: "center", maxWidth: 300 },
   gate: {
     flexDirection: "row",
     alignItems: "center",
@@ -135,13 +135,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: spacing.md,
   },
-  checkboxOn: { backgroundColor: colors.live, borderColor: colors.live },
-  check: { color: colors.white, fontWeight: "800", fontSize: 14 },
-  gateText: { color: colors.text, fontSize: fontSize.md, fontWeight: "600" },
+  checkboxOn: { backgroundColor: colors.text, borderColor: colors.text },
+  check: { color: colors.bg, fontFamily: fonts.condensedBold, fontSize: 15 },
+  gateText: { color: colors.text, fontFamily: fonts.bodyMedium, fontSize: fontSize.md + 1 },
   apple: { height: 48, width: "100%" },
   dim: { opacity: 0.5 },
-  unavailable: { color: colors.muted, fontSize: fontSize.sm, textAlign: "center" },
-  hint: { color: colors.muted, fontSize: fontSize.sm, textAlign: "center", marginTop: spacing.md },
+  unavailable: { color: colors.muted, fontFamily: fonts.body, fontSize: fontSize.sm, textAlign: "center" },
+  hint: { color: colors.muted, fontFamily: fonts.body, fontSize: fontSize.sm, textAlign: "center", marginTop: spacing.md },
   dev: {
     marginTop: spacing.xxl,
     padding: spacing.md,
@@ -150,5 +150,5 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
     borderColor: colors.oneAway,
   },
-  devLabel: { color: colors.oneAway, fontSize: fontSize.xs, fontWeight: "700", marginBottom: spacing.sm },
+  devLabel: { color: colors.oneAway, fontFamily: fonts.bodySemi, fontSize: fontSize.xs, marginBottom: spacing.sm },
 });
