@@ -261,7 +261,7 @@ export function detectTransitions(
   //     (the last leg's game just kicked off).
   // (b) can re-fire after (a) when the last leg's game starts later than the
   // others settled. The grader dedupes: notifications via the unique
-  // (user_id, slip_id, type) index, room_events by checking for an existing
+  // (user_id, slate_id, type, slip_id) index, room_events by checking for an existing
   // one_away row for the slip before inserting.
   const stillOpen = nextSlip.status === "pending" || nextSlip.status === "live";
   if (stillOpen && nextSlip.legs_total > 1 && nextSlip.legs_remaining === 1) {

@@ -188,11 +188,10 @@ export function slateDateFor(legs: Pick<ParsedLeg, "event_date_hint">[], now: Da
   for (const leg of legs) {
     const d = leg.event_date_hint;
     if (!d || !YMD_RE.test(d)) continue;
+    if (d < min || d > max) continue; // misread year or stale screenshot: ignore this hint
     if (earliest === null || d < earliest) earliest = d;
   }
-  if (earliest === null) return today;
-  if (earliest < min || earliest > max) return today;
-  return earliest;
+  return earliest ?? today;
 }
 
 export async function saveSlip(input: SaveSlipInput): Promise<string> {
