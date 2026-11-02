@@ -22,4 +22,4 @@ Live group bet-slip "sweat room": friends drop sportsbook slips, legs are graded
 - This repo was authored without npm access; the first `npm install` + `npx expo install --fix` on Windows may bump versions. Commit the lockfile it produces.
 - `realtime.messages` RLS must not be enabled via migration (Supabase manages it); only add policies.
 - The grader needs `GRADER_SECRET`, the push sender `WEBHOOK_SECRET`. Schedule the grader with `scripts/schedule-grader.sql` after the first deploy.
-- Supabase project: `lastleg`, ref `pdumwhkssabbnfoqwftj`, us-east-1. Migrations 0001-0004 applied 2026-11-02 and seed loaded; link with `supabase link --project-ref pdumwhkssabbnfoqwftj`.
+- Supabase project: `lastleg`, ref `pdumwhkssabbnfoqwftj`, us-east-1. Migrations 0001-0005 applied 2026-11-02 and seed loaded; link with `supabase link --project-ref pdumwhkssabbnfoqwftj`.
