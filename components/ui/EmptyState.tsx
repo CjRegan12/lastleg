@@ -29,7 +29,7 @@ export function EmptyState({ title, body, action }: EmptyStateProps) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingVertical: spacing.xxl * 2, paddingHorizontal: spacing.xs },
+  wrap: { paddingTop: spacing.xl, paddingBottom: spacing.xxl, paddingHorizontal: spacing.xs },
   title: { textAlign: "left" },
   body: { color: colors.muted, marginTop: spacing.sm, maxWidth: 320 },
   action: { marginTop: spacing.xl, alignSelf: "stretch" },

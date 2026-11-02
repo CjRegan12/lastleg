@@ -20,6 +20,7 @@ export type Database = {
           quiet_hours_start: number | null;
           quiet_hours_end: number | null;
           age_confirmed_at: string | null;
+          onboarded_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -32,6 +33,7 @@ export type Database = {
           quiet_hours_start?: number | null;
           quiet_hours_end?: number | null;
           age_confirmed_at?: string | null;
+          onboarded_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -44,6 +46,7 @@ export type Database = {
           quiet_hours_start?: number | null;
           quiet_hours_end?: number | null;
           age_confirmed_at?: string | null;
+          onboarded_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
