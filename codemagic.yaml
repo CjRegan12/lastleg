@@ -1,0 +1,110 @@
+# Last Leg iOS: build on Codemagic's Macs, sign with the App Store Connect key,
+# ship to TestFlight. Same pipeline as propfein-ios, swapped from Capacitor to
+# Expo: `npx expo prebuild` generates ios/ on every build (never committed),
+# then the Codemagic CLI signs and builds it.
+#
+# Before the first run:
+#   - Apple developer portal: App ID io.lastleg.app with Push Notifications and
+#     Sign in with Apple ticked, and Associated Domains.
+#   - App Store Connect: app record "Last Leg", bundle io.lastleg.app.
+#   - Codemagic: add this repo as an application; it reads this file. The
+#     App Store Connect integration "propfein" (your existing key) works for
+#     every app on the same Apple account.
+#   - Codemagic app settings > Environment variables: group "lastleg" with
+#     EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY (the
+#     app bundles these; they are publishable, not secret).
+workflows:
+  ios-testflight:
+    name: iOS TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: propfein
+    environment:
+      groups:
+        - lastleg
+      xcode: 26.4
+      node: 22
+      cocoapods: default
+      vars:
+        BUNDLE_ID: io.lastleg.app
+        # expo prebuild names the project after app.json "name" with spaces removed
+        XCODE_WORKSPACE: ios/LastLeg.xcworkspace
+        XCODE_SCHEME: LastLeg
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: io.lastleg.app
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+      cancel_previous_builds: true
+    when:
+      changeset:
+        includes:
+          - "app/**"
+          - "components/**"
+          - "constants/**"
+          - "hooks/**"
+          - "lib/**"
+          - "assets/**"
+          - "app.json"
+          - "package.json"
+          - "package-lock.json"
+          - "codemagic.yaml"
+        excludes:
+          - "**/*.md"
+          - "supabase/**"
+          - "evals/**"
+          - "scripts/**"
+          - "lib/grading/*.test.ts"
+    scripts:
+      - name: Install
+        script: |
+          npm ci --no-audit --no-fund --legacy-peer-deps
+      - name: Typecheck and grading tests
+        script: |
+          npm run typecheck
+          npm run test:grading
+      - name: Generate the iOS project
+        script: |
+          rm -rf ios
+          # --no-install: CocoaPods runs in its own step below so the log is readable
+          npx expo prebuild --platform ios --clean --no-install
+          ls ios
+      - name: CocoaPods
+        script: |
+          cd ios && pod install --repo-update
+      - name: Signing
+        script: |
+          xcode-project use-profiles
+      - name: Build number
+        script: |
+          # Marketing version comes from app.json "version" via prebuild.
+          # Build number = max(App Store, TestFlight) + 1, looked up by bundle id.
+          APP_STORE_APPLE_ID=$(app-store-connect apps list --bundle-id-identifier "$BUNDLE_ID" --strict-match-identifier --json \
+            | python3 -c 'import json,sys; a=json.load(sys.stdin); print(a[0]["id"] if a else "")') || APP_STORE_APPLE_ID=""
+          echo "app id from bundle id $BUNDLE_ID: '$APP_STORE_APPLE_ID'"
+          if [ -z "${APP_STORE_APPLE_ID:-}" ]; then echo "no App Store app id: create the Last Leg app record in App Store Connect first"; exit 1; fi
+          LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0)
+          TF=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0)
+          LATEST=${LATEST:-0}; TF=${TF:-0}
+          case "$LATEST$TF" in *[!0-9]*) echo "build numbers not numeric: '$LATEST' '$TF'"; exit 1;; esac
+          N=$(( (LATEST > TF ? LATEST : TF) + 1 ))
+          echo "build number $N"
+          cd ios && agvtool new-version -all "$N"
+      - name: Build the IPA
+        script: |
+          xcode-project build-ipa --workspace "$XCODE_WORKSPACE" --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Internal TestFlight group (you) gets every build automatically.
+        # Add friends to an external group in App Store Connect when a build
+        # is worth their time.
+        submit_to_testflight: true

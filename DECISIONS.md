@@ -5,7 +5,7 @@ Mirror of the Decisions table in the Last Leg Build Plan (Claude Doc). This file
 | Area | Decision |
 | --- | --- |
 | Mobile | Expo SDK 58, Expo Router, TypeScript, development builds (not Expo Go) |
-| Build/ship | EAS Build + EAS Submit from Windows, free tier; EAS Update for JS changes |
+| Build/ship | Codemagic (same pipeline as propfein-ios): push to main -> `expo prebuild` on a Codemagic Mac -> signed with the existing App Store Connect integration -> TestFlight. `ios/` is generated, never committed. EAS is used only for `eas init` (project id for Expo push tokens), not for builds |
 | Backend | Supabase: Postgres, Auth, Storage, Edge Functions (Deno), Realtime, pg_cron |
 | Sports data | None stored locally. Propfein API only (`lib/api/propfein.types.ts` is the contract). Mock mode when `PROPFEIN_API_URL=mock` |
 | Realtime | Supabase Broadcast on private `room:<id>` channels via `realtime.broadcast_changes` triggers. Never postgres_changes |
@@ -22,7 +22,7 @@ Mirror of the Decisions table in the Last Leg Build Plan (Claude Doc). This file
 ## Versions and limits
 
 - Expo SDK 58 (2026-10-15), React Native 0.88, Node 22.13+
-- EAS free: 15 iOS builds/month, 45 min timeout
+- Codemagic free tier: 500 build minutes/month; a Last Leg build is roughly 15 minutes
 - Expo push: 100 messages/request, 600/sec/project, 4 KiB payload
 - Supabase free: 200 realtime connections, 2M messages/mo, 500K function invocations
 - Claude Haiku 5.5: $0.10/M input, $0.50/M output; ~4,000 tokens per full-res iPhone screenshot, ~1,450 at 1568px long edge

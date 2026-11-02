@@ -9,8 +9,9 @@
     "newArchEnabled": true,
     "backgroundColor": "#0B0F14",
     "splash": {
-      "backgroundColor": "#0B0F14",
-      "resizeMode": "contain"
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0F14"
     },
     "ios": {
       "bundleIdentifier": "io.lastleg.app",
@@ -21,7 +22,8 @@
       ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "icon": "./assets/icon.png"
     },
     "plugins": [
       "expo-router",
@@ -49,9 +51,8 @@
     },
     "extra": {
       "router": {},
-      "eas": {
-        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
-      }
-    }
+      "eas": {}
+    },
+    "icon": "./assets/icon.png"
   }
 }
