@@ -7,11 +7,11 @@
     "scheme": "lastleg",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
-    "backgroundColor": "#0B0F14",
+    "backgroundColor": "#0A0B0D",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0B0F14"
+      "backgroundColor": "#0A0B0D"
     },
     "ios": {
       "bundleIdentifier": "io.lastleg.app",

@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
 
 import { FeedSlipCard } from "@/components/FeedSlipCard";
@@ -7,6 +7,7 @@ import { Avatar, Button, EmptyState, Screen, Segmented, T } from "@/components/u
 import { colors, radius, spacing } from "@/constants/theme";
 import { type FeedSlip, useSlipFeed } from "@/hooks/useSlipFeed";
 import { useUserId } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 import { formatMoney } from "@/lib/format";
 import { computeRecord, formatRecord, inPeriod, isSettled, type SlipRecord } from "@/lib/stats";
 
@@ -31,7 +32,23 @@ export default function CommunityScreen() {
   const { slips, loading, error, reload } = useSlipFeed(userId, "everyone", 500);
   const [period, setPeriod] = useState<BoardPeriod>("week");
 
-  const people = useMemo(() => new Set(slips.map((s) => s.user_id)).size, [slips]);
+  // Gate on room membership, not on who has posted: a room of three where one
+  // person has not dropped a slip yet is still a community.
+  const [people, setPeople] = useState<number | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      supabase
+        .from("room_members")
+        .select("user_id")
+        .then(({ data }) => {
+          if (!cancelled) setPeople(new Set((data ?? []).map((m) => m.user_id)).size);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   const standings = useMemo<Standing[]>(() => {
     const settled = inPeriod(slips.filter((s) => isSettled(s.status)), period);
@@ -56,7 +73,7 @@ export default function CommunityScreen() {
     [slips, userId],
   );
 
-  const thin = !loading && people < 3;
+  const thin = people !== null && people < 3;
 
   return (
     <Screen edges={["top"]} padded={false}>

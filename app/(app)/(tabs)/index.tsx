@@ -30,7 +30,7 @@ export default function LiveScreen() {
       .sort((a, b) => a.legs_remaining - b.legs_remaining || a.created_at.localeCompare(b.created_at));
     const waiting = slips.filter((s) => s.status === "pending");
     const settled = slips.filter(
-      (s) => s.settled_at && s.status !== "live" && s.status !== "pending" && s.settled_at.slice(0, 10) >= today,
+      (s) => !!s.settled_at && s.status !== "live" && s.status !== "pending" && todayNY(new Date(s.settled_at)) === today,
     );
     const out: Section[] = [];
     if (live.length) out.push({ title: "Live now", data: live });

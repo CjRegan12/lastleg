@@ -140,7 +140,7 @@ export default function RoomsScreen() {
         renderItem={({ item }) => (
           <Pressable
             onPress={() => router.push(`/rooms/${item.room.id}` as never)}
-            style={({ pressed }) => [styles.row, item.oneAway && styles.rowHot, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.row, !!item.oneAway && styles.rowHot, pressed && styles.pressed]}
           >
             <View style={styles.rowTop}>
               <T variant="title" style={styles.name} numberOfLines={1}>

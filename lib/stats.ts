@@ -80,32 +80,55 @@ export function computeRecord(slips: readonly StatSlip[]): SlipRecord {
 
 /**
  * Start of the period in America/New_York. "week" starts Monday 00:00 (sports
- * weeks end Sunday night); "month" starts on the 1st.
+ * weeks end Sunday night); "month" starts on the 1st. DST-safe: the calendar
+ * date is computed first, then that date's NY midnight is resolved on its own.
  */
 export function periodStart(period: Period, now: Date = new Date()): Date | null {
   if (period === "all") return null;
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    day: "2-digit",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).formatToParts(now);
-  const get = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? "";
-  const d = Number(get("day"));
-  const h = Number(get("hour")) % 24;
-  const mi = Number(get("minute"));
-  const se = Number(get("second"));
-  // Local-NY midnight today, expressed as an instant: now minus the NY time-of-day.
-  const midnightToday = new Date(now.getTime() - ((h * 60 + mi) * 60 + se) * 1000 - now.getMilliseconds());
-  if (period === "month") {
-    return new Date(midnightToday.getTime() - (d - 1) * 86_400_000);
-  }
-  const dow = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(get("weekday"));
-  const sinceMonday = (dow + 6) % 7;
-  return new Date(midnightToday.getTime() - sinceMonday * 86_400_000);
+  const t = nyParts(now);
+  if (period === "month") return nyMidnight(t.y, t.m, 1);
+  const sinceMonday = (t.dow + 6) % 7;
+  const target = new Date(Date.UTC(t.y, t.m - 1, t.d - sinceMonday));
+  return nyMidnight(target.getUTCFullYear(), target.getUTCMonth() + 1, target.getUTCDate());
+}
+
+interface NYParts {
+  y: number;
+  m: number;
+  d: number;
+  h: number;
+  dow: number;
+}
+
+const NY = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  weekday: "short",
+  hour12: false,
+});
+
+function nyParts(at: Date): NYParts {
+  const parts = NY.formatToParts(at);
+  const get = (k: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === k)?.value ?? "";
+  return {
+    y: Number(get("year")),
+    m: Number(get("month")),
+    d: Number(get("day")),
+    h: Number(get("hour")) % 24,
+    dow: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(get("weekday")),
+  };
+}
+
+/** The instant of 00:00 America/New_York on a calendar date. */
+function nyMidnight(y: number, m: number, d: number): Date {
+  // Guess EST (UTC-5); NY wall-clock hour of the guess is 0 (EST) or 1 (EDT).
+  const guess = Date.UTC(y, m - 1, d, 5);
+  const h = nyParts(new Date(guess)).h;
+  const delta = h < 12 ? h : h - 24;
+  return new Date(guess - delta * 3_600_000);
 }
 
 /** Slips settled on or after the period start (by settled_at, falling back to created_at). */

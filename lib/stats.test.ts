@@ -61,13 +61,31 @@ describe("periodStart", () => {
   it("week starts Monday midnight ET", () => {
     assert.equal(periodStart("week", now)?.toISOString(), "2026-11-02T05:00:00.000Z");
   });
-  it("month starts on the 1st midnight ET", () => {
-    assert.equal(periodStart("month", now)?.toISOString(), "2026-11-01T05:00:00.000Z");
+  it("month starts on the 1st midnight ET (still EDT on Nov 1 2026)", () => {
+    assert.equal(periodStart("month", now)?.toISOString(), "2026-11-01T04:00:00.000Z");
   });
   it("all is unbounded", () => assert.equal(periodStart("all", now), null));
   it("sunday night still belongs to the week that started the previous monday", () => {
     const sun = new Date("2026-11-09T03:30:00Z"); // Sun 2026-11-08 22:30 ET
     assert.equal(periodStart("week", sun)?.toISOString(), "2026-11-02T05:00:00.000Z");
+  });
+  it("week start before the fall-back is EDT midnight", () => {
+    const sun = new Date("2026-11-01T17:00:00Z"); // Sun 2026-11-01 12:00 EST (DST ended that morning)
+    assert.equal(periodStart("week", sun)?.toISOString(), "2026-10-26T04:00:00.000Z");
+  });
+  it("week start before the spring-forward is EST midnight", () => {
+    const sun = new Date("2026-03-08T20:00:00Z"); // Sun 2026-03-08 16:00 EDT
+    assert.equal(periodStart("week", sun)?.toISOString(), "2026-03-02T05:00:00.000Z");
+  });
+  it("month start in march is EST midnight", () => {
+    assert.equal(periodStart("month", new Date("2026-03-20T12:00:00Z"))?.toISOString(), "2026-03-01T05:00:00.000Z");
+  });
+  it("month start in july is EDT midnight", () => {
+    assert.equal(periodStart("month", new Date("2026-07-20T12:00:00Z"))?.toISOString(), "2026-07-01T04:00:00.000Z");
+  });
+  it("just after midnight monday ET is the new week", () => {
+    const mon = new Date("2026-11-09T05:10:00Z"); // Mon 2026-11-09 00:10 EST
+    assert.equal(periodStart("week", mon)?.toISOString(), "2026-11-09T05:00:00.000Z");
   });
 });
 
