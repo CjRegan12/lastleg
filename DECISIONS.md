@@ -20,6 +20,7 @@ Mirror of the Decisions table in the Last Leg Build Plan (Claude Doc). This file
 | Tail link | Plain sportsbook URLs in v1; no affiliate tags |
 | App Store | LLC/Organization enrollment, 18+ override, US only, 21+ gate, RG footer |
 | Not in v1 | Account sync (SharpSports), live player stats, premium, Android, chat beyond reactions, books beyond DK + FanDuel |
+| Temporary exception (2026-11-02) | Production has `PROPFEIN_API_URL=mock` + `ALLOW_MOCK_PROPFEIN=true` so parse-slip can run before the Propfein API exists. The grader is NOT deployed or scheduled while this is set. Remove both secrets and set the real `PROPFEIN_API_URL` + `PROPFEIN_API_KEY` the day the Propfein endpoints ship. |
 | Schema changes | Migrations only (`supabase/migrations`), applied with the Supabase CLI |
 | Secrets | EAS environment variables (app) and `supabase secrets set` (functions). Never in the repo |
 
