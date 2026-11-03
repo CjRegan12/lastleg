@@ -1,6 +1,7 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 
-import { colors, fontSize, radius, spacing } from "@/constants/theme";
+import { T } from "@/components/ui/Text";
+import { colors, radius, spacing } from "@/constants/theme";
 import type { Enums, RoomEvent } from "@/lib/database.types";
 import { formatMoney, formatRelative } from "@/lib/format";
 
@@ -13,7 +14,7 @@ export function Ticker({ events }: TickerProps) {
   if (events.length === 0) {
     return (
       <View style={styles.empty}>
-        <Text style={styles.emptyText}>Quiet for now. Slips and grades show up here live.</Text>
+        <T variant="small">Quiet for now. Slips and grades show up here live.</T>
       </View>
     );
   }
@@ -23,10 +24,12 @@ export function Ticker({ events }: TickerProps) {
         const color = eventColor(e.type);
         return (
           <View key={e.id} style={[styles.chip, { borderColor: color }]}>
-            <Text style={[styles.chipText, { color }]} numberOfLines={1}>
+            <T variant="smallMedium" color={color} style={styles.chipText} numberOfLines={1}>
               {describe(e)}
-            </Text>
-            <Text style={styles.time}>{formatRelative(e.created_at)}</Text>
+            </T>
+            <T variant="micro" style={styles.time}>
+              {formatRelative(e.created_at)}
+            </T>
           </View>
         );
       })}
@@ -70,9 +73,9 @@ function describe(e: RoomEvent): string {
     case "slip_dead":
       return `${who}'s slip is dead`;
     case "one_away":
-      return `${who} is ONE AWAY${payout ? ` from ${payout}` : ""}`;
+      return `${who} is one leg away${payout ? ` from ${payout}` : ""}`;
     case "cashed":
-      return `${who} CASHED${payout ? ` ${payout}` : ""}`;
+      return `${who} cashed${payout ? ` ${payout}` : ""}`;
     case "tailed":
       return `${who} tailed ${typeof p.target_handle === "string" ? p.target_handle : "a slip"}`;
     case "slate_final":
@@ -94,8 +97,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     maxWidth: 280,
   },
-  chipText: { fontSize: fontSize.sm, fontWeight: "600", flexShrink: 1 },
-  time: { color: colors.muted, fontSize: fontSize.xs, marginLeft: spacing.sm },
+  chipText: { flexShrink: 1 },
+  time: { marginLeft: spacing.sm },
   empty: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  emptyText: { color: colors.muted, fontSize: fontSize.sm },
 });

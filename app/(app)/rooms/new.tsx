@@ -1,9 +1,9 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, Text } from "react-native";
+import { StyleSheet } from "react-native";
 
-import { Button, Input, Screen } from "@/components/ui";
-import { colors, fontSize, spacing } from "@/constants/theme";
+import { Button, Input, Screen, T } from "@/components/ui";
+import { colors, spacing } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 
 export default function NewRoomScreen() {
@@ -29,7 +29,9 @@ export default function NewRoomScreen() {
 
   return (
     <Screen scroll edges={["bottom"]}>
-      <Text style={styles.lead}>Name it after the group chat. You can share the invite code right after.</Text>
+      <T variant="body" color={colors.muted} style={styles.lead}>
+        Name it after the group chat. You can share the invite code right after.
+      </T>
       <Input
         label="Room name"
         placeholder="Sunday Degens"
@@ -48,5 +50,5 @@ export default function NewRoomScreen() {
 }
 
 const styles = StyleSheet.create({
-  lead: { color: colors.muted, fontSize: fontSize.md, marginVertical: spacing.lg, lineHeight: 21 },
+  lead: { marginVertical: spacing.lg },
 });

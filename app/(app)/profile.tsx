@@ -1,10 +1,10 @@
 import * as Linking from "expo-linking";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, StyleSheet, Switch, Text, View } from "react-native";
+import { Alert, StyleSheet, Switch, View } from "react-native";
 
 import { RGFooter } from "@/components/RGFooter";
-import { Avatar, Button, Input, Screen, Segmented } from "@/components/ui";
-import { colors, fontSize, radius, spacing } from "@/constants/theme";
+import { Avatar, Button, Input, Screen, Segmented, T } from "@/components/ui";
+import { colors, radius, spacing } from "@/constants/theme";
 import { useProfile } from "@/hooks/useProfile";
 import { useAuth, useUserId } from "@/lib/auth";
 import type { RoomStandingsRow } from "@/lib/database.types";
@@ -118,10 +118,14 @@ export default function ProfileScreen() {
     <Screen scroll edges={["bottom"]}>
       <View style={styles.hero}>
         <Avatar handle={profile?.handle} size={64} />
-        <Text style={styles.handle}>{profile?.handle ?? ""}</Text>
+        <T variant="title" style={styles.handle} numberOfLines={1}>
+          {profile?.handle ?? ""}
+        </T>
       </View>
 
-      <Text style={styles.section}>Handle</Text>
+      <T variant="heading" style={styles.section}>
+        Handle
+      </T>
       <Input
         value={handle}
         onChangeText={setHandle}
@@ -140,35 +144,43 @@ export default function ProfileScreen() {
         disabled={!profile || handle.trim() === profile.handle}
       />
 
-      <Text style={styles.section}>Notifications</Text>
+      <T variant="heading" style={styles.section}>
+        Notifications
+      </T>
       <View style={styles.rowCard}>
         <View style={styles.rowText}>
-          <Text style={styles.rowTitle}>Push notifications</Text>
-          <Text style={styles.rowSub}>One away, cashed, slip died, recap.</Text>
+          <T variant="bodyMedium">Push notifications</T>
+          <T variant="small" style={styles.rowSub}>
+            One leg away, cashed, slip died, recap.
+          </T>
         </View>
         <Switch
           value={pushOn}
           onValueChange={togglePush}
           disabled={pushBusy}
-          trackColor={{ true: colors.live, false: colors.border }}
+          trackColor={{ true: colors.muted, false: colors.border }}
           thumbColor={colors.white}
         />
       </View>
       <View style={styles.rowCard}>
         <View style={styles.rowText}>
-          <Text style={styles.rowTitle}>Quiet hours</Text>
-          <Text style={styles.rowSub}>No pushes between these hours (your time).</Text>
+          <T variant="bodyMedium">Quiet hours</T>
+          <T variant="small" style={styles.rowSub}>
+            No pushes between these hours (your time).
+          </T>
         </View>
         <Switch
           value={quietOn}
           onValueChange={toggleQuiet}
-          trackColor={{ true: colors.live, false: colors.border }}
+          trackColor={{ true: colors.muted, false: colors.border }}
           thumbColor={colors.white}
         />
       </View>
       {quietOn && profile ? (
         <View style={styles.quiet}>
-          <Text style={styles.quietLabel}>From</Text>
+          <T variant="smallMedium" style={styles.quietLabel}>
+            From
+          </T>
           <Segmented
             options={HOURS}
             value={String(profile.quiet_hours_start ?? 0)}
@@ -176,7 +188,9 @@ export default function ProfileScreen() {
             labels={HOUR_LABELS}
             scrollable
           />
-          <Text style={[styles.quietLabel, styles.gapSm]}>Until</Text>
+          <T variant="smallMedium" style={[styles.quietLabel, styles.gapSm]}>
+            Until
+          </T>
           <Segmented
             options={HOURS}
             value={String(profile.quiet_hours_end ?? 8)}
@@ -187,20 +201,27 @@ export default function ProfileScreen() {
         </View>
       ) : null}
 
-      <Text style={styles.section}>Season</Text>
+      <T variant="heading" style={styles.section}>
+        Season
+      </T>
       <View style={styles.statsGrid}>
-        <Stat label="record" value={`${season.won}-${season.lost}`} />
+        <Stat label="Record" value={`${season.won}-${season.lost}`} />
         <Stat
           label="net"
           value={formatMoney(season.profit, { signed: true })}
           color={season.profit > 0 ? colors.won : season.profit < 0 ? colors.lost : undefined}
         />
         <Stat label="ROI" value={`${season.roi.toFixed(1)}%`} />
-        <Stat label="bad beats" value={String(season.badBeats)} color={season.badBeats > 0 ? colors.oneAway : undefined} />
+        <Stat label="Bad beats" value={String(season.badBeats)} color={season.badBeats > 0 ? colors.oneAway : undefined} />
       </View>
-      <Text style={styles.fine}>Across {standings.length} {standings.length === 1 ? "room" : "rooms"}. Tracking only. No money moves through this app.</Text>
+      <T variant="small" style={styles.fine}>
+        Across {standings.length} {standings.length === 1 ? "room" : "rooms"}. Tracking only. No money moves through
+        this app.
+      </T>
 
-      <Text style={styles.section}>Account</Text>
+      <T variant="heading" style={styles.section}>
+        Account
+      </T>
       <Button title="Privacy policy" variant="ghost" size="sm" onPress={() => Linking.openURL(PRIVACY_URL)} />
       <Button
         title="Sign out"
@@ -222,23 +243,20 @@ export default function ProfileScreen() {
 function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <View style={styles.stat}>
-      <Text style={[styles.statValue, color ? { color } : null]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <T variant="number" color={color}>
+        {value}
+      </T>
+      <T variant="small" style={styles.statLabel}>
+        {label}
+      </T>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   hero: { alignItems: "center", paddingVertical: spacing.xl },
-  handle: { color: colors.text, fontSize: fontSize.xl, fontWeight: "800", marginTop: spacing.md },
-  section: {
-    color: colors.muted,
-    fontSize: fontSize.xs,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginTop: spacing.xl,
-    marginBottom: spacing.sm,
-  },
+  handle: { marginTop: spacing.md },
+  section: { marginTop: spacing.xl, marginBottom: spacing.sm },
   rowCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -250,10 +268,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   rowText: { flex: 1, marginRight: spacing.md },
-  rowTitle: { color: colors.text, fontWeight: "600", fontSize: fontSize.md },
-  rowSub: { color: colors.muted, fontSize: fontSize.sm, marginTop: 2 },
+  rowSub: { marginTop: 2 },
   quiet: { marginBottom: spacing.sm },
-  quietLabel: { color: colors.muted, fontSize: fontSize.xs, marginBottom: spacing.xs },
+  quietLabel: { color: colors.muted, marginBottom: spacing.xs },
   gapSm: { marginTop: spacing.sm },
   gap: { marginTop: spacing.md },
   statsGrid: {
@@ -265,7 +282,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   stat: { flex: 1, alignItems: "center" },
-  statValue: { color: colors.text, fontSize: fontSize.lg, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  statLabel: { color: colors.muted, fontSize: fontSize.xs, marginTop: 2 },
-  fine: { color: colors.pending, fontSize: fontSize.xs, marginTop: spacing.sm },
+  statLabel: { marginTop: 2 },
+  fine: { marginTop: spacing.sm },
 });

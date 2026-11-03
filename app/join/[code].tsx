@@ -1,9 +1,9 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 
-import { Button, Screen } from "@/components/ui";
-import { colors, fontSize, spacing } from "@/constants/theme";
+import { Button, Screen, T } from "@/components/ui";
+import { colors, spacing } from "@/constants/theme";
 import { useAuth } from "@/lib/auth";
 import { joinRoomByCode } from "@/lib/rooms";
 
@@ -34,8 +34,10 @@ export default function JoinByLinkScreen() {
     return (
       <Screen>
         <View style={styles.center}>
-          <ActivityIndicator color={colors.live} />
-          <Text style={styles.muted}>Joining {clean}...</Text>
+          <ActivityIndicator color={colors.muted} />
+          <T variant="body" color={colors.muted}>
+            Joining {clean}...
+          </T>
         </View>
       </Screen>
     );
@@ -45,9 +47,13 @@ export default function JoinByLinkScreen() {
     return (
       <Screen>
         <View style={styles.center}>
-          <Text style={styles.title}>You were invited to a room</Text>
-          <Text style={styles.code}>{clean}</Text>
-          <Text style={styles.muted}>Sign in first, then enter this code.</Text>
+          <T variant="title">You were invited to a room</T>
+          <T variant="numberLg" style={styles.code}>
+            {clean}
+          </T>
+          <T variant="body" color={colors.muted} style={styles.muted}>
+            Sign in first, then enter this code.
+          </T>
           <Button
             title="Sign in"
             onPress={() => router.replace("/(auth)/sign-in" as never)}
@@ -61,8 +67,10 @@ export default function JoinByLinkScreen() {
   return (
     <Screen>
       <View style={styles.center}>
-        <Text style={styles.title}>Could not join</Text>
-        <Text style={styles.muted}>{error}</Text>
+        <T variant="title">Could not join</T>
+        <T variant="body" color={colors.muted} style={styles.muted}>
+          {error}
+        </T>
         <Button title="Back to rooms" onPress={() => router.replace("/(app)" as never)} style={styles.btn} />
       </View>
     </Screen>
@@ -71,8 +79,8 @@ export default function JoinByLinkScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.md },
-  title: { color: colors.text, fontSize: fontSize.lg, fontWeight: "700" },
-  code: { color: colors.text, fontSize: fontSize.xxl, fontWeight: "800", letterSpacing: 4 },
-  muted: { color: colors.muted, fontSize: fontSize.md, textAlign: "center" },
+  // Invite codes are the one tracked string in the app: 8 glyphs you read aloud across a room.
+  code: { letterSpacing: 4 },
+  muted: { textAlign: "center" },
   btn: { alignSelf: "stretch", marginTop: spacing.lg },
 });

@@ -1,20 +1,14 @@
+import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, {
-  Easing,
-  cancelAnimation,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from "react-native-reanimated";
+import { useEffect, useRef } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming } from "react-native-reanimated";
 
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
+import { T } from "@/components/ui/Text";
 import { BET_TYPE_LABELS, BOOK_LABELS } from "@/constants/books";
-import { colors, fontSize, radius, spacing, statusColor } from "@/constants/theme";
+import { amberGlow, colors, radius, spacing, statusColor } from "@/constants/theme";
 import type { Enums, Leg, SlateBoardRow } from "@/lib/database.types";
 import { formatMoney, formatOdds } from "@/lib/format";
 
@@ -26,32 +20,30 @@ interface SlipCardProps {
   roomId: string;
 }
 
+/**
+ * Room board card. Same look as FeedSlipCard: hairline border, amber edge and
+ * glow only when one leg away, with a single breathe the moment it gets there.
+ */
 export function SlipCard({ slip, legs, roomId }: SlipCardProps) {
   const router = useRouter();
   const status = (slip.status ?? "pending") as Enums<"slip_status">;
   const remaining = slip.legs_remaining ?? legs.filter((l) => isOpen(l.status)).length;
   const oneAway = status === "live" && remaining === 1;
-  const border = statusColor(status, remaining);
+  const edge = statusColor(status, remaining);
 
-  const pulse = useSharedValue(1);
+  const scale = useSharedValue(1);
+  const wasOneAway = useRef(oneAway);
   useEffect(() => {
-    if (oneAway) {
-      pulse.value = withRepeat(
-        withSequence(
-          withTiming(0.35, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-          withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-        ),
-        -1,
-        false,
+    if (oneAway && !wasOneAway.current) {
+      scale.value = withSequence(
+        withTiming(1.015, { duration: 220, easing: Easing.out(Easing.quad) }),
+        withTiming(1, { duration: 320, easing: Easing.inOut(Easing.quad) }),
       );
-    } else {
-      cancelAnimation(pulse);
-      pulse.value = withTiming(1, { duration: 200 });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
     }
-    return () => cancelAnimation(pulse);
-  }, [oneAway, pulse]);
-
-  const glow = useAnimatedStyle(() => ({ opacity: pulse.value }));
+    wasOneAway.current = oneAway;
+  }, [oneAway, scale]);
+  const breathe = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   const open = () => {
     if (!slip.id) return;
@@ -59,46 +51,53 @@ export function SlipCard({ slip, legs, roomId }: SlipCardProps) {
   };
 
   return (
-    <Pressable onPress={open} style={({ pressed }) => [styles.wrap, pressed && styles.pressed]}>
-      <Animated.View pointerEvents="none" style={[styles.borderLayer, { borderColor: border }, glow]} />
-      <View style={styles.card}>
-        <View style={styles.row}>
-          <Avatar handle={slip.handle} size={28} />
-          <Text style={styles.handle} numberOfLines={1}>
+    <Animated.View style={[styles.wrap, oneAway && styles.glow, breathe]}>
+      <Pressable
+        onPress={open}
+        style={({ pressed }) => [styles.card, { borderColor: oneAway ? colors.oneAway : colors.border }, pressed && styles.pressed]}
+      >
+        <View style={styles.head}>
+          <Avatar handle={slip.handle} size={26} />
+          <T variant="smallMedium" style={styles.handle} numberOfLines={1}>
             {slip.handle ?? "someone"}
-          </Text>
-          <View style={styles.badges}>
-            {slip.book ? <Badge label={BOOK_LABELS[slip.book]} /> : null}
-            {slip.bet_type ? (
-              <Badge label={BET_TYPE_LABELS[slip.bet_type]} style={styles.badgeGap} />
-            ) : null}
-          </View>
+          </T>
+          {slip.book ? (
+            <T variant="small" numberOfLines={1}>
+              {BOOK_LABELS[slip.book]}
+            </T>
+          ) : null}
+          {slip.bet_type ? (
+            <T variant="small" numberOfLines={1}>
+              {BET_TYPE_LABELS[slip.bet_type]}
+            </T>
+          ) : null}
         </View>
 
-        <View style={[styles.row, styles.moneyRow]}>
-          <Text style={styles.money}>
-            {formatMoney(slip.stake)} <Text style={styles.arrow}>to win</Text>{" "}
-            {formatMoney(slip.potential_payout)}
-          </Text>
-          <Text style={[styles.odds, { color: border }]}>{formatOdds(slip.odds_american)}</Text>
+        <View style={styles.money}>
+          <T variant="number" color={edge}>
+            {formatOdds(slip.odds_american)}
+          </T>
+          <T variant="small" style={styles.stake}>
+            {formatMoney(slip.stake)} to win {formatMoney(slip.potential_payout)}
+          </T>
         </View>
 
         <View style={styles.legs}>
           {legs.map((leg) => (
             <View key={leg.id} style={styles.legRow}>
               <View style={[styles.dot, { backgroundColor: statusColor(leg.status) }]} />
-              <Text style={styles.legText} numberOfLines={1}>
+              <T variant="body" style={styles.legText} numberOfLines={1}>
                 {leg.selection}
-              </Text>
+              </T>
             </View>
           ))}
         </View>
 
-        <View style={styles.footer}>
-          <Badge label={footerLabel(status, remaining, slip.legs_total ?? legs.length)} color={border} />
+        <View style={styles.foot}>
+          <Badge label={footerLabel(status, remaining, slip.legs_total ?? legs.length)} color={edge} solid={oneAway} />
         </View>
-      </View>
-    </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -109,15 +108,15 @@ function isOpen(s: Enums<"leg_status">): boolean {
 function footerLabel(status: Enums<"slip_status">, remaining: number, total: number): string {
   switch (status) {
     case "won":
-      return "CASHED";
+      return "Cashed";
     case "lost":
-      return "DEAD";
+      return "Dead";
     case "void":
-      return "VOID";
+      return "Void";
     case "push":
-      return "PUSH";
+      return "Push";
     case "live":
-      return remaining === 1 ? "ONE AWAY" : `${remaining} of ${total} legs left`;
+      return remaining === 1 ? "One leg away" : `${remaining} of ${total} legs left`;
     default:
       return total === 1 ? "1 leg" : `${total} legs`;
   }
@@ -125,33 +124,21 @@ function footerLabel(status: Enums<"slip_status">, remaining: number, total: num
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: spacing.md, borderRadius: radius.lg },
-  pressed: { opacity: 0.9 },
-  borderLayer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-  },
+  glow: amberGlow,
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    padding: spacing.md,
-    margin: 1.5,
+    borderWidth: 1,
+    padding: spacing.lg,
   },
-  row: { flexDirection: "row", alignItems: "center" },
-  handle: { color: colors.text, fontWeight: "600", marginLeft: spacing.sm, flexShrink: 1 },
-  badges: { flexDirection: "row", marginLeft: "auto" },
-  badgeGap: { marginLeft: spacing.xs },
-  moneyRow: { marginTop: spacing.md, justifyContent: "space-between" },
-  money: { color: colors.text, fontSize: fontSize.md, fontWeight: "700" },
-  arrow: { color: colors.muted, fontWeight: "400", fontSize: fontSize.sm },
-  odds: { fontSize: fontSize.md, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  pressed: { opacity: 0.9 },
+  head: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  handle: { flexShrink: 1, marginRight: "auto" },
+  money: { flexDirection: "row", alignItems: "baseline", gap: spacing.md, marginTop: spacing.md },
+  stake: { flexShrink: 1 },
   legs: { marginTop: spacing.sm },
   legRow: { flexDirection: "row", alignItems: "center", paddingVertical: 3 },
   dot: { width: 8, height: 8, borderRadius: 4, marginRight: spacing.sm },
-  legText: { color: colors.text, fontSize: fontSize.sm, flexShrink: 1 },
-  footer: { marginTop: spacing.sm, flexDirection: "row" },
+  legText: { flexShrink: 1 },
+  foot: { marginTop: spacing.md, flexDirection: "row" },
 });

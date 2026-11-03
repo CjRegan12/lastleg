@@ -1,15 +1,12 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SlipCard } from "@/components/SlipCard";
 import { Ticker } from "@/components/Ticker";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { Screen } from "@/components/ui/Screen";
-import { colors, fontSize, radius, spacing } from "@/constants/theme";
+import { Badge, Button, EmptyState, Screen, T } from "@/components/ui";
+import { colors, radius, spacing, statusColor } from "@/constants/theme";
 import { useRoom } from "@/hooks/useRoom";
 import { useSlateBoard } from "@/hooks/useSlateBoard";
 import { formatMoney, formatSlateDate, shiftDate, todayNY } from "@/lib/format";
@@ -76,30 +73,51 @@ export default function RoomBoardScreen() {
           title: room?.name ?? "",
           headerRight: () =>
             room ? (
-              <Pressable onPress={() => shareInvite(room)} hitSlop={8} style={styles.invite}>
-                <Text style={styles.inviteText}>Invite</Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => shareInvite(room)}
+                hitSlop={8}
+                style={({ pressed }) => [styles.invite, pressed && styles.pressed]}
+              >
+                <T variant="smallMedium">Invite</T>
               </Pressable>
             ) : null,
         }}
       />
 
       <View style={styles.slateBar}>
-        <Pressable onPress={() => setSlateDate(shiftDate(slateDate, -1))} hitSlop={8} style={styles.chev}>
-          <Text style={styles.chevText}>‹</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Previous day"
+          onPress={() => setSlateDate(shiftDate(slateDate, -1))}
+          hitSlop={8}
+          style={styles.chev}
+        >
+          <T variant="title" style={styles.chevText}>
+            ‹
+          </T>
         </Pressable>
         <Pressable onPress={() => setSlateDate(today)} style={styles.slateLabelWrap}>
           <View style={styles.slateTitleRow}>
-            <Text style={styles.slateLabel}>{isToday ? "Today" : formatSlateDate(slateDate)}</Text>
-            {isUpcoming ? <Badge label="Upcoming" color={colors.pending} style={styles.upcomingChip} /> : null}
+            <T variant="title">{isToday ? "Today" : formatSlateDate(slateDate)}</T>
+            {isUpcoming ? <Badge label="Upcoming" color={colors.pending} /> : null}
           </View>
-          {slate ? <Text style={styles.slateStatus}>{slate.status.toUpperCase()}</Text> : null}
+          {slate ? (
+            <T variant="small" style={styles.slateStatus}>
+              {slateStatusLabel(slate.status)}
+            </T>
+          ) : null}
         </Pressable>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Next day"
           onPress={() => canGoForward && setSlateDate(shiftDate(slateDate, 1))}
           hitSlop={8}
           style={[styles.chev, !canGoForward && styles.chevOff]}
         >
-          <Text style={styles.chevText}>›</Text>
+          <T variant="title" style={styles.chevText}>
+            ›
+          </T>
         </Pressable>
       </View>
 
@@ -112,12 +130,16 @@ export default function RoomBoardScreen() {
         refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.muted} />}
         ListHeaderComponent={
           <View style={styles.summary}>
-            <Stat label="slips" value={String(totals.count)} />
-            <Stat label="at risk" value={formatMoney(totals.atRisk)} />
-            <Stat label="live" value={String(totals.live)} color={colors.live} />
-            <Stat label="cashed" value={String(totals.won)} color={colors.won} />
-            <Stat label="dead" value={String(totals.lost)} color={colors.lost} />
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+            <Stat label="Slips" value={String(totals.count)} />
+            <Stat label="At risk" value={formatMoney(totals.atRisk)} />
+            <Stat label="Live" value={String(totals.live)} color={statusColor("live")} />
+            <Stat label="Cashed" value={String(totals.won)} color={statusColor("won")} />
+            <Stat label="Dead" value={String(totals.lost)} color={statusColor("lost")} />
+            {error ? (
+              <T variant="small" color={colors.lost} style={styles.error}>
+                {error}
+              </T>
+            ) : null}
           </View>
         }
         ListEmptyComponent={
@@ -149,17 +171,20 @@ export default function RoomBoardScreen() {
             ) : null}
             {isToday && upcoming.length > 0 ? (
               <View style={styles.upcoming}>
-                <Text style={styles.upcomingTitle}>Upcoming</Text>
+                <T variant="heading" style={styles.upcomingTitle}>
+                  Upcoming
+                </T>
                 {upcoming.map((u) => (
                   <Pressable
                     key={u.id}
+                    accessibilityRole="button"
                     onPress={() => setSlateDate(u.slate_date)}
-                    style={({ pressed }) => [styles.upcomingRow, pressed && styles.upcomingPressed]}
+                    style={({ pressed }) => [styles.upcomingRow, pressed && styles.pressed]}
                   >
-                    <Text style={styles.upcomingDate}>{formatSlateDate(u.slate_date)}</Text>
-                    <Text style={styles.upcomingCount}>
-                      {u.slipCount} {u.slipCount === 1 ? "slip" : "slips"} ›
-                    </Text>
+                    <T variant="bodyMedium">{formatSlateDate(u.slate_date)}</T>
+                    <T variant="small">
+                      {u.slipCount} {u.slipCount === 1 ? "slip" : "slips"}
+                    </T>
                   </Pressable>
                 ))}
               </View>
@@ -178,7 +203,9 @@ export default function RoomBoardScreen() {
           onPress={() => router.push(`/add-slip?room=${roomId}` as never)}
           style={({ pressed }) => [styles.fab, { bottom: insets.bottom + spacing.lg }, pressed && styles.fabPressed]}
         >
-          <Text style={styles.fabText}>+ Add slip</Text>
+          <T variant="heading" color={colors.bg}>
+            Add slip
+          </T>
         </Pressable>
       ) : null}
     </Screen>
@@ -188,10 +215,20 @@ export default function RoomBoardScreen() {
 function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <View style={styles.stat}>
-      <Text style={[styles.statValue, color ? { color } : null]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <T variant="number" color={color}>
+        {value}
+      </T>
+      <T variant="small" style={styles.statLabel}>
+        {label}
+      </T>
     </View>
   );
+}
+
+/** slate.status is a db enum (open, live, final...); show it as a plain word. */
+function slateStatusLabel(status: string): string {
+  const s = status.replace(/_/g, " ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 const styles = StyleSheet.create({
@@ -203,7 +240,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  inviteText: { color: colors.text, fontWeight: "600", fontSize: fontSize.sm },
+  pressed: { opacity: 0.85 },
   slateBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -213,12 +250,10 @@ const styles = StyleSheet.create({
   },
   chev: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   chevOff: { opacity: 0.25 },
-  chevText: { color: colors.text, fontSize: 28, lineHeight: 30 },
+  chevText: { color: colors.muted },
   slateLabelWrap: { alignItems: "center" },
-  slateTitleRow: { flexDirection: "row", alignItems: "center" },
-  upcomingChip: { marginLeft: spacing.sm },
-  slateLabel: { color: colors.text, fontSize: fontSize.lg, fontWeight: "700" },
-  slateStatus: { color: colors.muted, fontSize: fontSize.xs, letterSpacing: 1, marginTop: 2 },
+  slateTitleRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  slateStatus: { marginTop: 2 },
   list: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   summary: {
     flexDirection: "row",
@@ -228,51 +263,36 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
     marginBottom: spacing.lg,
   },
   stat: { flex: 1, minWidth: 60, alignItems: "center" },
-  statValue: { color: colors.text, fontSize: fontSize.lg, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  statLabel: { color: colors.muted, fontSize: fontSize.xs, marginTop: 2 },
-  error: { color: colors.lost, fontSize: fontSize.sm, width: "100%", paddingHorizontal: spacing.md, paddingTop: spacing.sm },
+  statLabel: { marginTop: 2 },
+  error: { width: "100%", paddingHorizontal: spacing.sm, paddingTop: spacing.sm },
   recap: { marginTop: spacing.md },
   upcoming: { marginTop: spacing.lg },
-  upcomingTitle: {
-    color: colors.muted,
-    fontSize: fontSize.xs,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: spacing.xs,
-  },
+  upcomingTitle: { marginBottom: spacing.sm },
   upcomingRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
-  upcomingPressed: { opacity: 0.85 },
-  upcomingDate: { color: colors.text, fontSize: fontSize.sm, fontWeight: "600" },
-  upcomingCount: { color: colors.muted, fontSize: fontSize.sm },
   fab: {
     position: "absolute",
     right: spacing.lg,
-    backgroundColor: colors.live,
+    backgroundColor: colors.text,
     paddingHorizontal: spacing.xl,
     height: 52,
-    borderRadius: 26,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: colors.black,
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
   },
-  fabPressed: { opacity: 0.85 },
-  fabText: { color: colors.white, fontWeight: "700", fontSize: fontSize.md },
+  fabPressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
 });

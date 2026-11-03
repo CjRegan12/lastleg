@@ -1,12 +1,12 @@
 import * as Sharing from "expo-sharing";
 import { useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, View } from "react-native";
 import ViewShot from "react-native-view-shot";
 
-import { Avatar, Button, Screen } from "@/components/ui";
+import { Avatar, Button, Screen, T } from "@/components/ui";
 import { APP_NAME, WEB_JOIN_BASE } from "@/constants/books";
-import { colors, fontSize, radius, spacing } from "@/constants/theme";
+import { colors, radius, spacing } from "@/constants/theme";
 import type { RoomStandingsRow, Slate, SlateBoardRow } from "@/lib/database.types";
 import { formatMoney, formatOdds, formatSlateDate } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
@@ -110,7 +110,9 @@ export default function RecapScreen() {
   if (!recap) {
     return (
       <Screen edges={["bottom"]}>
-        <Text style={styles.muted}>{error ?? "Loading..."}</Text>
+        <T variant="body" color={colors.muted} style={styles.muted}>
+          {error ?? "Loading..."}
+        </T>
       </Screen>
     );
   }
@@ -120,22 +122,37 @@ export default function RecapScreen() {
   return (
     <Screen scroll edges={["bottom"]}>
       <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }} style={styles.card}>
-        <Text style={styles.cardRoom}>{recap.roomName}</Text>
-        <Text style={styles.cardDate}>{formatSlateDate(recap.slate.slate_date)}</Text>
+        <T variant="title" numberOfLines={1}>
+          {recap.roomName}
+        </T>
+        <T variant="small" style={styles.cardDate}>
+          {formatSlateDate(recap.slate.slate_date)}
+        </T>
 
         <View style={styles.recordRow}>
           <View style={styles.recordCell}>
-            <Text style={[styles.recordNum, { color: colors.won }]}>{recap.won}</Text>
-            <Text style={styles.recordLabel}>cashed</Text>
+            <T variant="numberLg" color={colors.won}>
+              {recap.won}
+            </T>
+            <T variant="small" style={styles.recordLabel}>
+              Cashed
+            </T>
           </View>
-          <Text style={styles.dash}>-</Text>
           <View style={styles.recordCell}>
-            <Text style={[styles.recordNum, { color: colors.lost }]}>{recap.lost}</Text>
-            <Text style={styles.recordLabel}>dead</Text>
+            <T variant="numberLg" color={colors.lost}>
+              {recap.lost}
+            </T>
+            <T variant="small" style={styles.recordLabel}>
+              Dead
+            </T>
           </View>
           <View style={[styles.recordCell, styles.netCell]}>
-            <Text style={[styles.recordNum, { color: netColor }]}>{formatMoney(recap.net, { signed: true })}</Text>
-            <Text style={styles.recordLabel}>net on {formatMoney(recap.risked)}</Text>
+            <T variant="numberLg" color={netColor}>
+              {formatMoney(recap.net, { signed: true })}
+            </T>
+            <T variant="small" style={styles.recordLabel}>
+              Net on {formatMoney(recap.risked)}
+            </T>
           </View>
         </View>
 
@@ -156,31 +173,39 @@ export default function RecapScreen() {
           />
         ) : null}
 
-        <Text style={styles.section}>Season standings</Text>
+        <T variant="heading" style={styles.section}>
+          Season standings
+        </T>
         {recap.standings.slice(0, 8).map((row, i) => {
           const profit = row.profit ?? 0;
           return (
             <View key={row.user_id ?? String(i)} style={styles.standRow}>
-              <Text style={styles.rank}>{i + 1}</Text>
+              <T variant="small" style={styles.rank}>
+                {i + 1}
+              </T>
               <Avatar handle={row.handle} size={24} />
-              <Text style={styles.standHandle} numberOfLines={1}>
+              <T variant="bodyMedium" style={styles.standHandle} numberOfLines={1}>
                 {row.handle}
-              </Text>
-              <Text style={styles.standRecord}>
+              </T>
+              <T variant="smallMedium" style={styles.standRecord}>
                 {row.won ?? 0}-{row.lost ?? 0}
-              </Text>
-              <Text style={[styles.standProfit, { color: profit > 0 ? colors.won : profit < 0 ? colors.lost : colors.muted }]}>
+              </T>
+              <T
+                variant="smallMedium"
+                color={profit > 0 ? colors.won : profit < 0 ? colors.lost : colors.muted}
+                style={styles.standProfit}
+              >
                 {formatMoney(profit, { signed: true })}
-              </Text>
+              </T>
             </View>
           );
         })}
 
         <View style={styles.cardFooter}>
-          <Text style={styles.cardBrand}>{APP_NAME}</Text>
-          <Text style={styles.cardJoin}>
+          <T variant="heading">{APP_NAME}</T>
+          <T variant="micro">
             {WEB_JOIN_BASE.replace("https://", "")}/{recap.inviteCode}
-          </Text>
+          </T>
         </View>
       </ViewShot>
 
@@ -192,18 +217,24 @@ export default function RecapScreen() {
 function Highlight({ title, color, handle, line }: { title: string; color: string; handle: string | null; line: string }) {
   return (
     <View style={[styles.highlight, { borderColor: color }]}>
-      <Text style={[styles.highlightTitle, { color }]}>{title}</Text>
+      <T variant="smallMedium" color={color}>
+        {title}
+      </T>
       <View style={styles.row}>
         <Avatar handle={handle} size={24} />
-        <Text style={styles.highlightHandle}>{handle ?? "someone"}</Text>
+        <T variant="bodyMedium" style={styles.highlightHandle}>
+          {handle ?? "someone"}
+        </T>
       </View>
-      <Text style={styles.highlightLine}>{line}</Text>
+      <T variant="small" style={styles.highlightLine}>
+        {line}
+      </T>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  muted: { color: colors.muted, fontSize: fontSize.md, marginTop: spacing.lg },
+  muted: { marginTop: spacing.lg },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -212,37 +243,26 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginTop: spacing.md,
   },
-  cardRoom: { color: colors.text, fontSize: fontSize.xl, fontWeight: "800" },
-  cardDate: { color: colors.muted, fontSize: fontSize.sm, marginTop: 2 },
-  recordRow: { flexDirection: "row", alignItems: "center", marginTop: spacing.lg },
-  recordCell: { alignItems: "center", minWidth: 56 },
+  cardDate: { marginTop: 2 },
+  recordRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing.xl, marginTop: spacing.lg },
+  recordCell: { alignItems: "flex-start" },
   netCell: { marginLeft: "auto", alignItems: "flex-end" },
-  recordNum: { fontSize: fontSize.xxl, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  recordLabel: { color: colors.muted, fontSize: fontSize.xs, marginTop: 2 },
-  dash: { color: colors.muted, fontSize: fontSize.xl, marginHorizontal: spacing.sm },
+  recordLabel: { marginTop: 2 },
   highlight: {
     borderLeftWidth: 3,
     paddingLeft: spacing.md,
     paddingVertical: spacing.sm,
     marginTop: spacing.lg,
   },
-  highlightTitle: { fontSize: fontSize.xs, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase" },
   row: { flexDirection: "row", alignItems: "center", marginTop: spacing.xs },
-  highlightHandle: { color: colors.text, fontWeight: "700", marginLeft: spacing.sm },
-  highlightLine: { color: colors.muted, fontSize: fontSize.sm, marginTop: spacing.xs },
-  section: {
-    color: colors.muted,
-    fontSize: fontSize.xs,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginTop: spacing.xl,
-    marginBottom: spacing.sm,
-  },
+  highlightHandle: { marginLeft: spacing.sm },
+  highlightLine: { marginTop: spacing.xs },
+  section: { marginTop: spacing.xl, marginBottom: spacing.sm },
   standRow: { flexDirection: "row", alignItems: "center", paddingVertical: 6 },
-  rank: { color: colors.muted, width: 20, fontSize: fontSize.sm, fontVariant: ["tabular-nums"] },
-  standHandle: { color: colors.text, flex: 1, marginLeft: spacing.sm, fontWeight: "600" },
-  standRecord: { color: colors.muted, fontSize: fontSize.sm, marginRight: spacing.md, fontVariant: ["tabular-nums"] },
-  standProfit: { fontWeight: "700", fontVariant: ["tabular-nums"], minWidth: 64, textAlign: "right" },
+  rank: { width: 20, fontVariant: ["tabular-nums"] },
+  standHandle: { flex: 1, marginLeft: spacing.sm },
+  standRecord: { color: colors.muted, marginRight: spacing.md, fontVariant: ["tabular-nums"] },
+  standProfit: { fontVariant: ["tabular-nums"], minWidth: 64, textAlign: "right" },
   cardFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -252,7 +272,5 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  cardBrand: { color: colors.text, fontWeight: "800" },
-  cardJoin: { color: colors.muted, fontSize: fontSize.xs },
   share: { marginTop: spacing.lg },
 });

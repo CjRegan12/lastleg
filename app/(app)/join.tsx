@@ -1,9 +1,9 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, Text } from "react-native";
+import { StyleSheet } from "react-native";
 
-import { Button, Input, Screen } from "@/components/ui";
-import { colors, fontSize, spacing } from "@/constants/theme";
+import { Button, Input, Screen, T } from "@/components/ui";
+import { colors, fonts, spacing } from "@/constants/theme";
 import { joinRoomByCode } from "@/lib/rooms";
 
 export default function JoinScreen() {
@@ -28,7 +28,9 @@ export default function JoinScreen() {
 
   return (
     <Screen scroll edges={["bottom"]}>
-      <Text style={styles.lead}>Paste the 8-character code from your group chat.</Text>
+      <T variant="body" color={colors.muted} style={styles.lead}>
+        Paste the 8-character code from your group chat.
+      </T>
       <Input
         label="Invite code"
         placeholder="ABCD2345"
@@ -49,6 +51,7 @@ export default function JoinScreen() {
 }
 
 const styles = StyleSheet.create({
-  lead: { color: colors.muted, fontSize: fontSize.md, marginVertical: spacing.lg, lineHeight: 21 },
-  code: { letterSpacing: 4, fontSize: fontSize.xl, fontWeight: "700", textAlign: "center" },
+  lead: { marginVertical: spacing.lg },
+  // Invite codes are the one tracked string in the app: 8 glyphs you read aloud across a room.
+  code: { fontFamily: fonts.condensedBold, fontSize: 28, letterSpacing: 4, textAlign: "center" },
 });

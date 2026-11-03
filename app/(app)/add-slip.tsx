@@ -1,10 +1,10 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, Alert, Image, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, StyleSheet, View } from "react-native";
 
 import { ConfirmSlip } from "@/components/ConfirmSlip";
-import { Button, Screen } from "@/components/ui";
-import { colors, fontSize, radius, spacing } from "@/constants/theme";
+import { Button, Screen, T } from "@/components/ui";
+import { colors, radius, spacing } from "@/constants/theme";
 import { useUserId } from "@/lib/auth";
 import {
   callParseSlip,
@@ -72,7 +72,9 @@ export default function AddSlipScreen() {
   if (!roomId) {
     return (
       <Screen edges={["bottom"]}>
-        <Text style={styles.error}>Missing room. Open this from a room board.</Text>
+        <T variant="small" color={colors.lost} style={styles.error}>
+          Missing room. Open this from a room board.
+        </T>
       </Screen>
     );
   }
@@ -80,14 +82,20 @@ export default function AddSlipScreen() {
   if (step.kind === "pick") {
     return (
       <Screen scroll edges={["bottom"]}>
-        <Text style={styles.lead}>
+        <T variant="body" color={colors.muted} style={styles.lead}>
           Screenshot the bet slip in your sportsbook app, then add it here. We read the legs, match them to
           tonight's games and grade them live for the room.
-        </Text>
+        </T>
         <Button title="Choose screenshot" onPress={() => start("library")} />
         <Button title="Take a photo" variant="secondary" onPress={() => start("camera")} style={styles.gap} />
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Text style={styles.fine}>Images are stored privately and only used to read your slip.</Text>
+        {error ? (
+          <T variant="small" color={colors.lost} style={styles.error}>
+            {error}
+          </T>
+        ) : null}
+        <T variant="micro" style={styles.fine}>
+          Images are stored privately and only used to read your slip.
+        </T>
       </Screen>
     );
   }
@@ -97,9 +105,13 @@ export default function AddSlipScreen() {
       <Screen edges={["bottom"]}>
         <View style={styles.center}>
           <Image source={{ uri: step.image.uri }} style={styles.preview} resizeMode="contain" />
-          <ActivityIndicator color={colors.live} style={styles.gap} />
-          <Text style={styles.status}>{step.kind === "uploading" ? "Uploading..." : "Reading your slip..."}</Text>
-          <Text style={styles.fine}>Usually a few seconds.</Text>
+          <ActivityIndicator color={colors.muted} style={styles.gap} />
+          <T variant="heading" style={styles.status}>
+            {step.kind === "uploading" ? "Uploading..." : "Reading your slip..."}
+          </T>
+          <T variant="micro" style={styles.fine}>
+            Usually a few seconds.
+          </T>
         </View>
       </Screen>
     );
@@ -110,7 +122,11 @@ export default function AddSlipScreen() {
     <Screen scroll edges={["bottom"]}>
       <Image source={{ uri: step.image.uri }} style={styles.thumb} resizeMode="cover" />
       <ConfirmSlip value={step.draft} onChange={(draft) => !saving && setStep({ ...step, draft })} />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? (
+        <T variant="small" color={colors.lost} style={styles.error}>
+          {error}
+        </T>
+      ) : null}
       <Button title="Add to the board" onPress={submit} loading={saving} style={styles.gap} />
       <Button
         title="Start over"
@@ -139,11 +155,11 @@ function validate(s: ParsedSlip): string | null {
 }
 
 const styles = StyleSheet.create({
-  lead: { color: colors.muted, fontSize: fontSize.md, marginVertical: spacing.lg, lineHeight: 21 },
+  lead: { marginVertical: spacing.lg },
   gap: { marginTop: spacing.md },
   gapSm: { marginTop: spacing.sm },
-  error: { color: colors.lost, fontSize: fontSize.sm, marginTop: spacing.md },
-  fine: { color: colors.pending, fontSize: fontSize.xs, marginTop: spacing.lg, textAlign: "center" },
+  error: { marginTop: spacing.md },
+  fine: { marginTop: spacing.lg, textAlign: "center" },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   preview: { width: "70%", aspectRatio: 9 / 16, borderRadius: radius.lg, backgroundColor: colors.surface },
   thumb: {
@@ -154,5 +170,5 @@ const styles = StyleSheet.create({
     marginVertical: spacing.md,
     alignSelf: "flex-end",
   },
-  status: { color: colors.text, fontSize: fontSize.md, fontWeight: "600", marginTop: spacing.sm },
+  status: { marginTop: spacing.sm },
 });

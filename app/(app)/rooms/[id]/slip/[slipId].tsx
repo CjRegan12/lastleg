@@ -1,20 +1,11 @@
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import {
-  ActionSheetIOS,
-  Alert,
-  Linking,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { ActionSheetIOS, Alert, Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { RGFooter } from "@/components/RGFooter";
-import { Avatar, AvatarStack, Badge, Button, Screen } from "@/components/ui";
+import { Avatar, AvatarStack, Badge, Button, Screen, T } from "@/components/ui";
 import { BET_TYPE_LABELS, BOOK_LABELS, BOOK_URLS, MARKET_LABELS } from "@/constants/books";
-import { colors, fontSize, radius, spacing, statusColor, statusLabel } from "@/constants/theme";
+import { amberGlow, colors, radius, spacing, statusColor, statusLabel } from "@/constants/theme";
 import { useUserId } from "@/lib/auth";
 import type { Enums, Leg, Slip } from "@/lib/database.types";
 import { formatLine, formatMoney, formatOdds, formatRelative } from "@/lib/format";
@@ -159,49 +150,53 @@ export default function SlipDetailScreen() {
   if (!slip) {
     return (
       <Screen edges={["bottom"]}>
-        <Text style={styles.muted}>{error ?? "Loading..."}</Text>
+        <T variant="body" color={colors.muted} style={styles.loading}>
+          {error ?? "Loading..."}
+        </T>
       </Screen>
     );
   }
 
   const slipColor = statusColor(slip.status, slip.legs_remaining);
   const isMine = slip.user_id === userId;
+  const oneAway = slip.status === "live" && slip.legs_remaining === 1;
 
   return (
     <Screen scroll edges={["bottom"]}>
-      <View style={[styles.header, { borderColor: slipColor }]}>
+      <View style={[styles.header, { borderColor: oneAway ? colors.oneAway : colors.border }, oneAway && styles.glow]}>
         <View style={styles.row}>
           <Avatar handle={slip.handle} size={36} />
           <View style={styles.headerText}>
-            <Text style={styles.handle}>{slip.handle}</Text>
-            <Text style={styles.muted}>
-              {BOOK_LABELS[slip.book]} · {BET_TYPE_LABELS[slip.bet_type]} · {formatRelative(slip.created_at)}
-            </Text>
+            <T variant="heading" numberOfLines={1}>
+              {slip.handle}
+            </T>
+            <T variant="small" style={styles.meta}>
+              {BET_TYPE_LABELS[slip.bet_type]} on {BOOK_LABELS[slip.book]}, {formatRelative(slip.created_at)}
+            </T>
           </View>
-          <Badge label={statusLabel(slip.status).toUpperCase()} color={slipColor} solid />
+          <Badge label={headerLabel(slip)} color={slipColor} solid={oneAway} />
         </View>
         <View style={[styles.row, styles.moneyRow]}>
           <View>
-            <Text style={styles.moneyLabel}>Stake</Text>
-            <Text style={styles.money}>{formatMoney(slip.stake)}</Text>
+            <T variant="small">Stake</T>
+            <T variant="number">{formatMoney(slip.stake)}</T>
           </View>
           <View style={styles.center}>
-            <Text style={styles.moneyLabel}>Odds</Text>
-            <Text style={[styles.money, { color: slipColor }]}>{formatOdds(slip.odds_american)}</Text>
+            <T variant="small">Odds</T>
+            <T variant="number" color={slipColor}>
+              {formatOdds(slip.odds_american)}
+            </T>
           </View>
           <View style={styles.right}>
-            <Text style={styles.moneyLabel}>To win</Text>
-            <Text style={styles.money}>{formatMoney(slip.potential_payout)}</Text>
+            <T variant="small">To win</T>
+            <T variant="number">{formatMoney(slip.potential_payout)}</T>
           </View>
         </View>
-        {slip.status === "live" ? (
-          <Text style={[styles.remaining, { color: slipColor }]}>
-            {slip.legs_remaining === 1 ? "ONE LEG AWAY" : `${slip.legs_remaining} of ${slip.legs_total} legs left`}
-          </Text>
-        ) : null}
       </View>
 
-      <Text style={styles.section}>Legs</Text>
+      <T variant="heading" style={styles.section}>
+        Legs
+      </T>
       {legs.map((leg) => {
         const c = statusColor(leg.status);
         const others = sharedBy[legKey(leg.propfein_event_id, leg.propfein_market_key, leg.line)] ?? [];
@@ -214,63 +209,69 @@ export default function SlipDetailScreen() {
             style={({ pressed }) => [styles.leg, { borderLeftColor: c }, pressed && styles.pressed]}
           >
             <View style={styles.row}>
-              <Text style={styles.legSelection} numberOfLines={2}>
+              <T variant="bodyMedium" style={styles.legSelection} numberOfLines={2}>
                 {leg.selection}
-              </Text>
+              </T>
               <Badge label={statusLabel(leg.status)} color={c} />
             </View>
-            <Text style={styles.legMeta}>
-              {MARKET_LABELS[leg.market]}
-              {leg.player_name ? ` · ${leg.player_name}` : ""}
-              {leg.stat_type ? ` · ${leg.stat_type.replace(/_/g, " ")}` : ""}
-              {leg.line != null ? ` · line ${formatLine(leg.line, leg.market)}` : ""}
-              {leg.leg_odds_american != null ? ` · ${formatOdds(leg.leg_odds_american)}` : ""}
-            </Text>
+            <T variant="small" style={styles.legMeta}>
+              {legMeta(leg)}
+            </T>
             {/* Event context comes from the leg row itself: `teams` from the parse and
                 current_value from the grader. The app never talks to Propfein directly. */}
             {leg.teams && leg.teams.length > 0 ? (
-              <Text style={styles.teams}>{leg.teams.join(" vs ")}</Text>
+              <T variant="small" color={colors.text} style={styles.teams}>
+                {leg.teams.join(" vs ")}
+              </T>
             ) : null}
             {leg.current_value != null && leg.line != null && leg.status !== "pending" ? (
-              <Text style={[styles.progress, { color: c }]}>
+              <T variant="number" color={c} style={styles.progress}>
                 {leg.status === "live" ? "Now " : ""}
                 {formatLine(leg.current_value, leg.market)}
-                {leg.market === "spread" ? " margin" : ""} · line {formatLine(leg.line, leg.market)}
+                {leg.market === "spread" ? " margin" : ""}, line {formatLine(leg.line, leg.market)}
                 {leg.side ? ` (${leg.side})` : ""}
-              </Text>
+              </T>
             ) : leg.current_value != null && leg.status !== "pending" ? (
-              <Text style={[styles.progress, { color: c }]}>
+              <T variant="number" color={c} style={styles.progress}>
                 {leg.status === "live" ? "Now " : ""}margin {formatLine(leg.current_value, "spread")}
-              </Text>
+              </T>
             ) : null}
             {leg.status === "pending" ? (
-              <Text style={styles.event}>Not started. Updates land here once the game is live.</Text>
+              <T variant="small" style={styles.note}>
+                Not started. Updates land here once the game is live.
+              </T>
             ) : leg.status === "live" && leg.current_value == null ? (
-              <Text style={styles.event}>Live. Waiting on the first number from the grader.</Text>
+              <T variant="small" style={styles.note}>
+                Live. Waiting on the first number from the grader.
+              </T>
             ) : leg.status === "needs_review" ? (
-              <Text style={styles.warn}>Could not match this to a game. Long press to grade it by hand.</Text>
+              <T variant="small" color={colors.oneAway} style={styles.note}>
+                Could not match this to a game. Long press to grade it by hand.
+              </T>
             ) : null}
             {ov ? (
-              <Text style={styles.override}>
-                Overridden to {ov.new_status} by {ov.handle} · {formatRelative(ov.created_at)}
-              </Text>
+              <T variant="micro" color={colors.oneAway} style={styles.override}>
+                Overridden to {ov.new_status} by {ov.handle} {formatRelative(ov.created_at)}
+              </T>
             ) : null}
             {others.length > 0 ? (
               <View style={[styles.row, styles.others]}>
                 <AvatarStack handles={others} size={20} />
-                <Text style={styles.othersText}>
+                <T variant="micro" style={styles.othersText}>
                   {others.length === 1 ? `${others[0]} has this too` : `${others.length} others have this`}
-                </Text>
+                </T>
               </View>
             ) : null}
           </Pressable>
         );
       })}
-      <Text style={styles.hint}>Long press a leg to override its grade.</Text>
+      <T variant="micro" style={styles.hint}>
+        Long press a leg to override its grade.
+      </T>
 
       {!isMine && slip.status !== "lost" ? (
         <Button
-          title={tailed ? `Tailed · open ${BOOK_LABELS[slip.book]}` : `Tail this bet on ${BOOK_LABELS[slip.book]}`}
+          title={tailed ? `Tailed. Open ${BOOK_LABELS[slip.book]}` : `Tail this bet on ${BOOK_LABELS[slip.book]}`}
           variant={tailed ? "secondary" : "primary"}
           onPress={tail}
           style={styles.tail}
@@ -286,49 +287,60 @@ function legKey(eventId: string | null, marketKey: string | null, line: number |
   return `${eventId ?? ""}|${marketKey ?? ""}|${line ?? ""}`;
 }
 
+/** Status badge for the slip header. Live parlays say how far from cashing. */
+function headerLabel(slip: Slip): string {
+  if (slip.status === "live") {
+    if (slip.legs_remaining === 1) return "One leg away";
+    if (slip.legs_total > 1) return `${slip.legs_remaining} of ${slip.legs_total} legs left`;
+  }
+  return statusLabel(slip.status);
+}
+
+/** One plain line under the selection: market, player, stat, line and odds, comma separated. */
+function legMeta(leg: Leg): string {
+  const parts: string[] = [MARKET_LABELS[leg.market]];
+  if (leg.player_name) parts.push(leg.player_name);
+  if (leg.stat_type) parts.push(leg.stat_type.replace(/_/g, " "));
+  if (leg.line != null) parts.push(`line ${formatLine(leg.line, leg.market)}`);
+  if (leg.leg_odds_american != null) parts.push(formatOdds(leg.leg_odds_american));
+  return parts.join(", ");
+}
+
 const styles = StyleSheet.create({
+  loading: { marginTop: spacing.lg },
   header: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    borderWidth: 1.5,
+    borderWidth: 1,
     padding: spacing.lg,
     marginTop: spacing.md,
   },
+  glow: amberGlow,
   row: { flexDirection: "row", alignItems: "center" },
-  headerText: { flex: 1, marginLeft: spacing.md },
-  handle: { color: colors.text, fontWeight: "700", fontSize: fontSize.md },
-  muted: { color: colors.muted, fontSize: fontSize.sm, marginTop: 2 },
+  headerText: { flex: 1, marginLeft: spacing.md, marginRight: spacing.sm },
+  meta: { marginTop: 2 },
   moneyRow: { marginTop: spacing.lg, justifyContent: "space-between" },
   center: { alignItems: "center" },
   right: { alignItems: "flex-end" },
-  moneyLabel: { color: colors.muted, fontSize: fontSize.xs, textTransform: "uppercase", letterSpacing: 1 },
-  money: { color: colors.text, fontSize: fontSize.xl, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  remaining: { marginTop: spacing.md, fontWeight: "800", letterSpacing: 1, fontSize: fontSize.sm },
-  section: {
-    color: colors.muted,
-    fontSize: fontSize.xs,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginTop: spacing.xl,
-    marginBottom: spacing.sm,
-  },
+  section: { marginTop: spacing.xl, marginBottom: spacing.sm },
   leg: {
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderLeftWidth: 4,
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
   pressed: { opacity: 0.85 },
-  legSelection: { color: colors.text, fontSize: fontSize.md, fontWeight: "600", flex: 1, marginRight: spacing.sm },
-  legMeta: { color: colors.muted, fontSize: fontSize.sm, marginTop: spacing.xs },
-  teams: { color: colors.text, fontSize: fontSize.sm, marginTop: spacing.xs, opacity: 0.8 },
-  progress: { fontSize: fontSize.md, fontWeight: "800", marginTop: spacing.sm, fontVariant: ["tabular-nums"] },
-  event: { color: colors.muted, fontSize: fontSize.sm, marginTop: spacing.xs },
-  warn: { color: colors.oneAway, fontSize: fontSize.sm, marginTop: spacing.xs },
-  override: { color: colors.oneAway, fontSize: fontSize.xs, marginTop: spacing.sm, fontStyle: "italic" },
+  legSelection: { flex: 1, marginRight: spacing.sm },
+  legMeta: { marginTop: spacing.xs },
+  teams: { marginTop: spacing.xs },
+  progress: { marginTop: spacing.sm },
+  note: { marginTop: spacing.xs },
+  override: { marginTop: spacing.sm },
   others: { marginTop: spacing.sm },
-  othersText: { color: colors.muted, fontSize: fontSize.xs, marginLeft: spacing.sm },
-  hint: { color: colors.pending, fontSize: fontSize.xs, textAlign: "center", marginTop: spacing.xs },
+  othersText: { marginLeft: spacing.sm },
+  hint: { textAlign: "center", marginTop: spacing.xs },
   tail: { marginTop: spacing.xl },
 });

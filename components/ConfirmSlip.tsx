@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { StyleSheet, View, type ViewStyle } from "react-native";
 
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Segmented";
+import { T } from "@/components/ui/Text";
 import { BET_TYPE_LABELS, BET_TYPES, BOOK_LABELS, BOOKS, MARKET_LABELS, MARKETS, SPORTS } from "@/constants/books";
-import { colors, fontSize, radius, spacing } from "@/constants/theme";
+import { colors, radius, spacing } from "@/constants/theme";
 import { LOW_CONFIDENCE, type ParsedLeg, type ParsedSlip } from "@/lib/slips";
 
 interface ConfirmSlipProps {
@@ -28,15 +29,21 @@ export function ConfirmSlip({ value, onChange }: ConfirmSlipProps) {
   return (
     <View>
       {lowOverall ? (
-        <Text style={styles.notice}>
-          The parser was not confident about this slip. Check the amber fields before you submit.
-        </Text>
+        <View style={styles.notice}>
+          <T variant="small" color={colors.oneAway}>
+            The parser was not confident about this slip. Check the amber fields before you submit.
+          </T>
+        </View>
       ) : null}
 
-      <Text style={styles.label}>Book</Text>
+      <T variant="smallMedium" style={styles.label}>
+        Book
+      </T>
       <Segmented options={BOOKS} value={value.book} onChange={(b) => set("book", b)} labels={BOOK_LABELS} scrollable warn={lowOverall} />
 
-      <Text style={[styles.label, styles.gap]}>Bet type</Text>
+      <T variant="smallMedium" style={[styles.label, styles.gap]}>
+        Bet type
+      </T>
       <Segmented
         options={BET_TYPES}
         value={value.bet_type}
@@ -72,31 +79,37 @@ export function ConfirmSlip({ value, onChange }: ConfirmSlipProps) {
         />
       </View>
 
-      <Text style={[styles.label, styles.gap]}>
+      <T variant="smallMedium" style={[styles.label, styles.gap]}>
         Legs ({value.legs.length})
-      </Text>
+      </T>
       {value.legs.map((leg, i) => {
         const low = leg.confidence < LOW_CONFIDENCE;
         const unmatched = leg.match === null;
         return (
           <View key={i} style={[styles.leg, unmatched && styles.legUnmatched]}>
             <View style={styles.row}>
-              <Text style={styles.legTitle}>Leg {i + 1}</Text>
+              <T variant="heading" style={styles.legTitle}>
+                Leg {i + 1}
+              </T>
               {unmatched ? (
-                <Badge label="couldn't match to a game" color={colors.oneAway} />
+                <Badge label="No game matched" color={colors.oneAway} />
               ) : (
-                <Badge label={`matched ${Math.round((leg.match?.confidence ?? 0) * 100)}%`} color={colors.won} />
+                <Badge label={`Matched ${Math.round((leg.match?.confidence ?? 0) * 100)}%`} color={colors.won} />
               )}
             </View>
             {unmatched ? (
-              <Text style={styles.unmatchedNote}>
+              <T variant="small" color={colors.oneAway} style={styles.unmatchedNote}>
                 This leg will not auto-grade. Anyone in the room can grade it by hand from the slip screen.
-              </Text>
+              </T>
             ) : null}
 
-            <Text style={styles.subLabel}>Sport</Text>
+            <T variant="micro" style={styles.subLabel}>
+              Sport
+            </T>
             <Segmented options={SPORTS} value={leg.sport} onChange={(s) => setLeg(i, { sport: s })} scrollable warn={low} />
-            <Text style={[styles.subLabel, styles.gapSm]}>Market</Text>
+            <T variant="micro" style={[styles.subLabel, styles.gapSm]}>
+              Market
+            </T>
             <Segmented
               options={MARKETS}
               value={leg.market}
@@ -204,15 +217,13 @@ function NumberField({ label, value, onChange, warn, integer, signed, style }: N
 
 const styles = StyleSheet.create({
   notice: {
-    color: colors.oneAway,
-    fontSize: fontSize.sm,
     backgroundColor: `${colors.oneAway}1A`,
     borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
-  label: { color: colors.muted, fontSize: fontSize.sm, fontWeight: "500", marginBottom: spacing.xs },
-  subLabel: { color: colors.muted, fontSize: fontSize.xs, marginBottom: spacing.xs, marginTop: spacing.sm },
+  label: { color: colors.muted, marginBottom: spacing.xs },
+  subLabel: { marginBottom: spacing.xs, marginTop: spacing.sm },
   gap: { marginTop: spacing.lg },
   gapSm: { marginTop: spacing.sm },
   row: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" },
@@ -227,6 +238,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   legUnmatched: { borderColor: colors.oneAway },
-  legTitle: { color: colors.text, fontWeight: "700", fontSize: fontSize.md, flex: 1 },
-  unmatchedNote: { color: colors.oneAway, fontSize: fontSize.xs, marginTop: spacing.xs },
+  legTitle: { flex: 1 },
+  unmatchedNote: { marginTop: spacing.xs },
 });
