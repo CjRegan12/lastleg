@@ -44,7 +44,19 @@
       ],
       "expo-status-bar",
       "expo-splash-screen",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-share-intent",
+        {
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsText": true,
+            "NSExtensionActivationSupportsImageWithMaxCount": 1
+          },
+          "iosAppGroupIdentifier": "group.io.lastleg.app",
+          "iosShareExtensionBundleIdentifier": "io.lastleg.app.share-extension"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

@@ -9,6 +9,7 @@ import { useUserId } from "@/lib/auth";
 import {
   callParseSlip,
   callParseSlipFromLink,
+  downscale,
   looksLikeShareLink,
   type ParsedSlip,
   pickAndPrepareImage,
@@ -26,8 +27,14 @@ type Step =
   | { kind: "saving"; image: PreparedImage | null; storagePath: string; parsed: ParsedSlip; draft: ParsedSlip };
 
 export default function AddSlipScreen() {
-  // `url` arrives from the share sheet / paste flow; `room` from the picker.
-  const { room: roomId, url: sharedUrl } = useLocalSearchParams<{ room: string; url?: string }>();
+  // `url` or `image` arrive from the share sheet; `room` from the picker.
+  const { room: roomId, url: sharedUrl, image: sharedImage, w, h } = useLocalSearchParams<{
+    room: string;
+    url?: string;
+    image?: string;
+    w?: string;
+    h?: string;
+  }>();
   const router = useRouter();
   const userId = useUserId();
   const [step, setStep] = useState<Step>({ kind: "pick" });
@@ -52,22 +59,35 @@ export default function AddSlipScreen() {
     }
   };
 
-  // Shared in from another app: go straight to parsing, once.
+  // Shared in from another app: go straight to work, once.
   const autoStarted = useRef(false);
   useEffect(() => {
-    if (sharedUrl && roomId && !autoStarted.current) {
+    if (!roomId || autoStarted.current) return;
+    if (sharedUrl) {
       autoStarted.current = true;
       setLink(sharedUrl);
       void startFromLink(sharedUrl);
+    } else if (sharedImage) {
+      autoStarted.current = true;
+      void (async () => {
+        try {
+          const size = await measure(sharedImage, Number(w) || 0, Number(h) || 0);
+          const prepared = await downscale(sharedImage, size.width, size.height);
+          await start(prepared);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : String(e));
+          setStep({ kind: "pick" });
+        }
+      })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sharedUrl, roomId]);
+  }, [sharedUrl, sharedImage, roomId]);
 
-  const start = async (source: "library" | "camera") => {
+  const start = async (source: "library" | "camera" | PreparedImage) => {
     if (!roomId) return;
     setError(null);
     try {
-      const image = await pickAndPrepareImage(source);
+      const image = typeof source === "string" ? await pickAndPrepareImage(source) : source;
       if (!image) return;
       setStep({ kind: "uploading", image });
       const storagePath = await uploadSlipImage(userId, image.uri);
@@ -192,6 +212,18 @@ export default function AddSlipScreen() {
         style={styles.gapSm}
       />
     </Screen>
+  );
+}
+
+/** Shared files sometimes arrive without dimensions; ask the image. */
+function measure(uri: string, w: number, h: number): Promise<{ width: number; height: number }> {
+  if (w > 0 && h > 0) return Promise.resolve({ width: w, height: h });
+  return new Promise((resolve, reject) =>
+    Image.getSize(
+      uri,
+      (width, height) => resolve({ width, height }),
+      () => reject(new Error("Could not read the shared image")),
+    ),
   );
 }
 

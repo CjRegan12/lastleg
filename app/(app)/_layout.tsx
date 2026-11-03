@@ -47,6 +47,7 @@ function SignedIn({ userId }: { userId: string }) {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="welcome" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="pick-room" options={{ title: "Which room?", presentation: "modal" }} />
+      <Stack.Screen name="share" options={{ headerShown: false }} />
       <Stack.Screen name="rooms/new" options={{ title: "New room", presentation: "modal" }} />
       <Stack.Screen name="join" options={{ title: "Join a room", presentation: "modal" }} />
       <Stack.Screen name="rooms/[id]/index" options={{ title: "" }} />

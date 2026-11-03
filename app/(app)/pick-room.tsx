@@ -16,8 +16,12 @@ export default function PickRoomScreen() {
   const router = useRouter();
   const userId = useUserId();
   // A shared link rides along to add-slip once a room is chosen.
-  const { url } = useLocalSearchParams<{ url?: string }>();
-  const suffix = url ? `&url=${encodeURIComponent(url)}` : "";
+  const { url, image, w, h } = useLocalSearchParams<{ url?: string; image?: string; w?: string; h?: string }>();
+  const suffix = url
+    ? `&url=${encodeURIComponent(url)}`
+    : image
+      ? `&image=${encodeURIComponent(image)}&w=${w ?? 0}&h=${h ?? 0}`
+      : "";
   const [rooms, setRooms] = useState<Room[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
