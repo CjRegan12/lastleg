@@ -16,7 +16,7 @@
  * Nothing is written to the database here. The client inserts slips/legs after the
  * user confirms the parse (RLS allows own inserts).
  *
- * Secrets: ANTHROPIC_API_KEY, PROPFEIN_API_URL (or "mock"), PROPFEIN_API_KEY,
+ * Secrets: ANTHROPIC_API_KEY, ANTHROPIC_WORKSPACE_ID (only for org-level keys), PROPFEIN_API_URL (or "mock"), PROPFEIN_API_KEY,
  *          optional PARSE_MODEL_PRIMARY / PARSE_MODEL_FALLBACK.
  * Supabase injects SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
  */
@@ -200,6 +200,9 @@ async function callClaude(apiKey: string, model: string, image: ImageInput): Pro
       "x-api-key": apiKey,
       "anthropic-version": ANTHROPIC_VERSION,
       "content-type": "application/json",
+      // Keys created at the org level (not inside a workspace) must name the
+      // workspace to bill. Optional: workspace-scoped keys do not need it.
+      ...(Deno.env.get("ANTHROPIC_WORKSPACE_ID") ? { "anthropic-workspace-id": Deno.env.get("ANTHROPIC_WORKSPACE_ID")! } : {}),
     },
     body: JSON.stringify(body),
   });

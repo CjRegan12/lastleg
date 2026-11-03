@@ -31,6 +31,7 @@ supabase secrets set \
 - For local dev and the mock seed, set both: `PROPFEIN_API_URL=mock` and `ALLOW_MOCK_PROPFEIN=true` (in `supabase/functions/.env.local`, or via `supabase secrets set` on a dev project).
 - Never set `ALLOW_MOCK_PROPFEIN` on the production project. A grader silently grading real slips against fixtures is the failure mode this exists to prevent.
 - `EXPO_ACCESS_TOKEN` is optional until Expo push security is turned on for the project.
+- `ANTHROPIC_WORKSPACE_ID` is required when the Anthropic key was created at the organization level rather than inside a workspace (the API returns 400 "not scoped to a workspace" otherwise). Find it in the console under Settings -> Workspaces.
 - Optional parse overrides: `PARSE_MODEL_PRIMARY` (default `claude-haiku-5-5`), `PARSE_MODEL_FALLBACK` (default `claude-sonnet-5-5`).
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` are injected automatically.
 
