@@ -251,7 +251,7 @@ export default function SlipDetailScreen() {
             ) : null}
             {ov ? (
               <T variant="micro" color={colors.oneAway} style={styles.override}>
-                Overridden to {ov.new_status} by {ov.handle} {formatRelative(ov.created_at)}
+                Overridden to {ov.new_status} by {ov.handle}, {formatRelative(ov.created_at)}
               </T>
             ) : null}
             {others.length > 0 ? (
