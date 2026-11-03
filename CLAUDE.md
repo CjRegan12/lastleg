@@ -19,6 +19,13 @@ Live group bet-slip "sweat room": friends drop sportsbook slips, legs are graded
 - Functions: see `supabase/functions/README.md`
 
 ## Gotchas
+- Typecheck cannot run in the cloud container (no npm). CI typechecks; `ListEmptyComponent` takes `undefined`, never `null`.
+- Expo Router 58 uses its own tabs (`expo-router/js-tabs`), not @react-navigation: custom tab bar props are `{ state, descriptors, emitter, navigateToTab, insets }`.
+- Fonts are bundled TTFs in `assets/fonts` loaded with expo-font at the root; `DESIGN.md` is the design system and every Text goes through `<T variant>` from `components/ui`.
+- New deps need `npm install --legacy-peer-deps` on CJ's PC and a committed lockfile; `codemagic.yaml` falls back to `npm install` if the lockfile lags.
+- Anthropic key for parse-slip is org-level, so `ANTHROPIC_WORKSPACE_ID` must also be set as a function secret or Claude returns 400.
+- Edge Functions are deployed from CJ's PC with `npx supabase functions deploy <name>` (project is linked there); check logs with the Supabase MCP `query_logs` (source `function_logs`).
+- Share extension (branch `share-extension`) needs App Group `group.io.lastleg.app`, App ID `io.lastleg.app.share-extension`, and a second Codemagic profile before it can be on main.
 - This repo was authored without npm access; the first `npm install` + `npx expo install --fix` on Windows may bump versions. Commit the lockfile it produces.
 - `realtime.messages` RLS must not be enabled via migration (Supabase manages it); only add policies.
 - The grader needs `GRADER_SECRET`, the push sender `WEBHOOK_SECRET`. Schedule the grader with `scripts/schedule-grader.sql` after the first deploy.
