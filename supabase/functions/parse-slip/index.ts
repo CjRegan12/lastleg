@@ -251,6 +251,133 @@ function shouldEscalate(r: ClaudeCallResult): boolean {
   return r.parsed.overall_confidence < ESCALATE_BELOW_CONFIDENCE;
 }
 
+
+// ---------- share links ----------
+/**
+ * Sportsbook "share bet" pages are JavaScript shells; the one thing reliably
+ * present is the Open Graph preview image, which is a rendered picture of the
+ * slip. Fetch the page, find og:image / twitter:image, fetch that. Hosts are
+ * allow-listed so this cannot be used to proxy arbitrary URLs. If the shared
+ * URL is itself an image, use it directly.
+ */
+const SHARE_HOSTS = [
+  "fanduel.com",
+  "draftkings.com",
+  "dkng.co",
+  "prizepicks.com",
+  "underdogfantasy.com",
+  "betmgm.com",
+  "caesars.com",
+  "fanatics.com",
+  "fanatics.bet",
+  "kalshi.com",
+  "espnbet.com",
+  "hardrock.bet",
+  "bet365.com",
+  "betrivers.com",
+];
+const FETCH_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 19_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Mobile/15E148 Safari/604.1 LastLegBot/1.0 (+https://lastleg.io)";
+
+function hostAllowed(u: URL): boolean {
+  const h = u.hostname.toLowerCase();
+  return SHARE_HOSTS.some((d) => h === d || h.endsWith(`.${d}`));
+}
+
+function parseHttpsUrl(raw: string): URL {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    throw new HttpError(400, "that is not a valid link");
+  }
+  if (u.protocol !== "https:") throw new HttpError(400, "link must be https");
+  return u;
+}
+
+async function fetchWithLimit(
+  u: URL,
+  accept: string,
+  maxBytes: number,
+  opts: { requireAllowedHost: boolean },
+): Promise<{ body: ArrayBuffer; type: string; finalUrl: URL }> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10_000);
+  try {
+    const res = await fetch(u, { headers: { "user-agent": FETCH_UA, accept }, redirect: "follow", signal: ctrl.signal });
+    const finalUrl = new URL(res.url || u.toString());
+    if (opts.requireAllowedHost && !hostAllowed(finalUrl)) {
+      throw new HttpError(400, "that link redirected somewhere we do not read");
+    }
+    if (!res.ok) throw new HttpError(400, `the link returned ${res.status}`);
+    const len = Number(res.headers.get("content-length") ?? "0");
+    if (len > maxBytes) throw new HttpError(413, "the linked content is too large");
+    const body = await res.arrayBuffer();
+    if (body.byteLength > maxBytes) throw new HttpError(413, "the linked content is too large");
+    return { body, type: (res.headers.get("content-type") ?? "").toLowerCase(), finalUrl };
+  } catch (e) {
+    if (e instanceof HttpError) throw e;
+    throw new HttpError(400, "could not open that link");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function pickImageType(contentType: string, url: URL): ImageMediaType | null {
+  if (contentType.startsWith("image/png")) return "image/png";
+  if (contentType.startsWith("image/webp")) return "image/webp";
+  if (contentType.startsWith("image/jpeg") || contentType.startsWith("image/jpg")) return "image/jpeg";
+  if (contentType.startsWith("image/")) return null;
+  const p = url.pathname.toLowerCase();
+  if (p.endsWith(".png")) return "image/png";
+  if (p.endsWith(".webp")) return "image/webp";
+  if (p.endsWith(".jpg") || p.endsWith(".jpeg")) return "image/jpeg";
+  return null;
+}
+
+function findPreviewImage(html: string, base: URL): URL | null {
+  const metas = html.match(/<meta\s[^>]*>/gi) ?? [];
+  const want = ["og:image:secure_url", "og:image", "twitter:image", "twitter:image:src"];
+  const found: Record<string, string> = {};
+  for (const tag of metas) {
+    const key = /(?:property|name)\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1]?.toLowerCase();
+    const content = /content\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1];
+    if (key && content && want.includes(key) && !(key in found)) found[key] = content;
+  }
+  for (const k of want) {
+    if (found[k]) {
+      try {
+        return new URL(found[k].replace(/&amp;/g, "&"), base);
+      } catch {
+        /* try next */
+      }
+    }
+  }
+  return null;
+}
+
+async function imageFromShareLink(raw: string): Promise<{ bytes: ArrayBuffer; media_type: ImageMediaType }> {
+  const u = parseHttpsUrl(raw);
+  if (!hostAllowed(u)) throw new HttpError(400, "we can only read links from supported sportsbooks");
+
+  const first = await fetchWithLimit(u, "text/html,image/*;q=0.9,*/*;q=0.5", MAX_IMAGE_BYTES, { requireAllowedHost: true });
+  const direct = pickImageType(first.type, first.finalUrl);
+  if (direct) return { bytes: first.body, media_type: direct };
+  if (!first.type.includes("text/html")) throw new HttpError(400, "that link did not give us a slip image");
+
+  const html = new TextDecoder().decode(first.body);
+  const preview = findPreviewImage(html, first.finalUrl);
+  if (!preview) throw new HttpError(422, "no slip preview on that page, try a screenshot");
+  if (preview.protocol !== "https:") throw new HttpError(422, "no usable slip preview on that page");
+
+  // Preview images live on CDNs, so only the page host is allow-listed; the image
+  // must still be https and come back with an image content type.
+  const img = await fetchWithLimit(preview, "image/*", MAX_IMAGE_BYTES, { requireAllowedHost: false });
+  const type = pickImageType(img.type, img.finalUrl);
+  if (!type) throw new HttpError(422, "the preview was not an image we can read");
+  return { bytes: img.body, media_type: type };
+}
+
 // ---------- handler ----------
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
@@ -271,17 +398,20 @@ Deno.serve(async (req: Request) => {
     if (userErr || !user) throw new HttpError(401, "not authenticated");
 
     // 2. body
-    let body: { storage_path?: unknown; room_id?: unknown };
+    let body: { storage_path?: unknown; share_url?: unknown; room_id?: unknown };
     try {
       body = await req.json();
     } catch {
       throw new HttpError(400, "body must be JSON");
     }
-    const storagePath = typeof body.storage_path === "string" ? body.storage_path : "";
+    let storagePath = typeof body.storage_path === "string" ? body.storage_path : "";
+    const shareUrl = typeof body.share_url === "string" ? body.share_url.trim() : "";
     const roomId = typeof body.room_id === "string" ? body.room_id : "";
-    if (!storagePath || !roomId) throw new HttpError(400, "storage_path and room_id are required");
+    if ((!storagePath && !shareUrl) || !roomId) {
+      throw new HttpError(400, "storage_path or share_url, and room_id, are required");
+    }
     if (!UUID_RE.test(roomId)) throw new HttpError(400, "room_id must be a uuid");
-    if (!storagePath.startsWith(`${user.id}/`) || storagePath.includes("..")) {
+    if (storagePath && (!storagePath.startsWith(`${user.id}/`) || storagePath.includes(".."))) {
       throw new HttpError(400, "storage_path must be inside your own folder");
     }
 
@@ -298,17 +428,34 @@ Deno.serve(async (req: Request) => {
     }
     if (!membership) throw new HttpError(403, "you are not a member of this room");
 
-    // 4. download the image (service role; bucket is private) and base64 it
+    // 4. get the image bytes: either the uploaded screenshot, or the preview image
+    //    behind a sportsbook share link (which we then store like an upload so the
+    //    slip keeps a screenshot_path and the app flow is identical from here).
     const admin = createClient(supabaseUrl, env("SUPABASE_SERVICE_ROLE_KEY"), {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const { data: blob, error: dlErr } = await admin.storage.from(BUCKET).download(storagePath);
-    if (dlErr || !blob) {
-      console.error("parse-slip: download", dlErr?.message ?? "no data");
-      throw new HttpError(400, "could not read the uploaded image");
+    let image: ImageInput;
+    if (storagePath) {
+      const { data: blob, error: dlErr } = await admin.storage.from(BUCKET).download(storagePath);
+      if (dlErr || !blob) {
+        console.error("parse-slip: download", dlErr?.message ?? "no data");
+        throw new HttpError(400, "could not read the uploaded image");
+      }
+      if (blob.size > MAX_IMAGE_BYTES) throw new HttpError(413, "image is too large (5 MB max)");
+      image = { media_type: mediaTypeFor(storagePath), data: toBase64(await blob.arrayBuffer()) };
+    } else {
+      const fetched = await imageFromShareLink(shareUrl);
+      const ext = fetched.media_type === "image/png" ? "png" : fetched.media_type === "image/webp" ? "webp" : "jpg";
+      storagePath = `${user.id}/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await admin.storage
+        .from(BUCKET)
+        .upload(storagePath, fetched.bytes, { contentType: fetched.media_type, upsert: false });
+      if (upErr) {
+        console.error("parse-slip: store link image", upErr.message);
+        throw new HttpError(500, "could not store the slip image");
+      }
+      image = { media_type: fetched.media_type, data: toBase64(fetched.bytes) };
     }
-    if (blob.size > MAX_IMAGE_BYTES) throw new HttpError(413, "image is too large (5 MB max)");
-    const image: ImageInput = { media_type: mediaTypeFor(storagePath), data: toBase64(await blob.arrayBuffer()) };
 
     // 5. Propfein client first: if it is misconfigured we fail before spending Claude tokens.
     //    propfeinFromEnv throws when PROPFEIN_API_URL is unset/mock without ALLOW_MOCK_PROPFEIN=true;
@@ -360,6 +507,7 @@ Deno.serve(async (req: Request) => {
     return json({
       parsed,
       matches,
+      storage_path: storagePath,
       model_used: result.model,
       escalated,
       usage,

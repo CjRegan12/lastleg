@@ -1,13 +1,15 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Image, StyleSheet, View } from "react-native";
 
 import { ConfirmSlip } from "@/components/ConfirmSlip";
-import { Button, Screen, T } from "@/components/ui";
+import { Button, Input, Screen, T } from "@/components/ui";
 import { colors, radius, spacing } from "@/constants/theme";
 import { useUserId } from "@/lib/auth";
 import {
   callParseSlip,
+  callParseSlipFromLink,
+  looksLikeShareLink,
   type ParsedSlip,
   pickAndPrepareImage,
   type PreparedImage,
@@ -15,19 +17,51 @@ import {
   uploadSlipImage,
 } from "@/lib/slips";
 
+/** image is null when the slip came in as a share link (the server stored the preview). */
 type Step =
   | { kind: "pick" }
   | { kind: "uploading"; image: PreparedImage }
-  | { kind: "parsing"; image: PreparedImage; storagePath: string }
-  | { kind: "confirm"; image: PreparedImage; storagePath: string; parsed: ParsedSlip; draft: ParsedSlip }
-  | { kind: "saving"; image: PreparedImage; storagePath: string; parsed: ParsedSlip; draft: ParsedSlip };
+  | { kind: "parsing"; image: PreparedImage | null; storagePath: string | null }
+  | { kind: "confirm"; image: PreparedImage | null; storagePath: string; parsed: ParsedSlip; draft: ParsedSlip }
+  | { kind: "saving"; image: PreparedImage | null; storagePath: string; parsed: ParsedSlip; draft: ParsedSlip };
 
 export default function AddSlipScreen() {
-  const { room: roomId } = useLocalSearchParams<{ room: string }>();
+  // `url` arrives from the share sheet / paste flow; `room` from the picker.
+  const { room: roomId, url: sharedUrl } = useLocalSearchParams<{ room: string; url?: string }>();
   const router = useRouter();
   const userId = useUserId();
   const [step, setStep] = useState<Step>({ kind: "pick" });
   const [error, setError] = useState<string | null>(null);
+  const [link, setLink] = useState("");
+
+  const startFromLink = async (raw: string) => {
+    if (!roomId) return;
+    const url = looksLikeShareLink(raw);
+    if (!url) {
+      setError("That doesn't look like a sportsbook share link.");
+      return;
+    }
+    setError(null);
+    setStep({ kind: "parsing", image: null, storagePath: null });
+    try {
+      const { parsed, storagePath } = await callParseSlipFromLink(url, roomId);
+      setStep({ kind: "confirm", image: null, storagePath, parsed, draft: parsed });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStep({ kind: "pick" });
+    }
+  };
+
+  // Shared in from another app: go straight to parsing, once.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (sharedUrl && roomId && !autoStarted.current) {
+      autoStarted.current = true;
+      setLink(sharedUrl);
+      void startFromLink(sharedUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharedUrl, roomId]);
 
   const start = async (source: "library" | "camera") => {
     if (!roomId) return;
@@ -83,11 +117,28 @@ export default function AddSlipScreen() {
     return (
       <Screen scroll edges={["bottom"]}>
         <T variant="body" color={colors.muted} style={styles.lead}>
-          Screenshot the bet slip in your sportsbook app, then add it here. We read the legs, match them to
-          tonight's games and grade them live for the room.
+          In your sportsbook, open the bet and tap Share. Paste the link here, or share it straight to Last Leg.
         </T>
-        <Button title="Choose screenshot" onPress={() => start("library")} />
-        <Button title="Take a photo" variant="secondary" onPress={() => start("camera")} style={styles.gap} />
+        <Input
+          label="Share link"
+          placeholder="https://sportsbook.fanduel.com/..."
+          value={link}
+          onChangeText={(v) => {
+            setLink(v);
+            if (error) setError(null);
+          }}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          returnKeyType="go"
+          onSubmitEditing={() => link.trim() && startFromLink(link)}
+        />
+        <Button title="Read this slip" onPress={() => startFromLink(link)} disabled={!link.trim()} />
+        <T variant="small" style={styles.or}>
+          Or use a screenshot
+        </T>
+        <Button title="Choose screenshot" variant="secondary" onPress={() => start("library")} />
+        <Button title="Take a photo" variant="ghost" onPress={() => start("camera")} style={styles.gapSm} />
         {error ? (
           <T variant="small" color={colors.lost} style={styles.error}>
             {error}
@@ -104,10 +155,12 @@ export default function AddSlipScreen() {
     return (
       <Screen edges={["bottom"]}>
         <View style={styles.center}>
-          <Image source={{ uri: step.image.uri }} style={styles.preview} resizeMode="contain" />
+          {step.image ? (
+            <Image source={{ uri: step.image.uri }} style={styles.preview} resizeMode="contain" />
+          ) : null}
           <ActivityIndicator color={colors.muted} style={styles.gap} />
           <T variant="heading" style={styles.status}>
-            {step.kind === "uploading" ? "Uploading..." : "Reading your slip..."}
+            {step.kind === "uploading" ? "Uploading..." : step.image ? "Reading your slip..." : "Fetching your slip..."}
           </T>
           <T variant="micro" style={styles.fine}>
             Usually a few seconds.
@@ -120,7 +173,7 @@ export default function AddSlipScreen() {
   const saving = step.kind === "saving";
   return (
     <Screen scroll edges={["bottom"]}>
-      <Image source={{ uri: step.image.uri }} style={styles.thumb} resizeMode="cover" />
+      {step.image ? <Image source={{ uri: step.image.uri }} style={styles.thumb} resizeMode="cover" /> : null}
       <ConfirmSlip value={step.draft} onChange={(draft) => !saving && setStep({ ...step, draft })} />
       {error ? (
         <T variant="small" color={colors.lost} style={styles.error}>
@@ -156,6 +209,7 @@ function validate(s: ParsedSlip): string | null {
 
 const styles = StyleSheet.create({
   lead: { marginVertical: spacing.lg },
+  or: { marginTop: spacing.xl, marginBottom: spacing.sm },
   gap: { marginTop: spacing.md },
   gapSm: { marginTop: spacing.sm },
   error: { marginTop: spacing.md },

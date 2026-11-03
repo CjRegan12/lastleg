@@ -127,23 +127,87 @@ export async function uploadSlipImage(userId: string, localUri: string): Promise
 interface ParseSlipResponse {
   parsed: Omit<ParsedSlip, "legs"> & { legs: Omit<ParsedLeg, "match">[] };
   matches: { match: LegMatch | null; alternates: LegMatch[] }[];
+  storage_path?: string;
   model_used: string;
   escalated: boolean;
   usage: { input_tokens: number; output_tokens: number };
 }
 
 export async function callParseSlip(storagePath: string, roomId: string): Promise<ParsedSlip> {
-  const { data, error } = await supabase.functions.invoke<ParseSlipResponse>("parse-slip", {
-    body: { storage_path: storagePath, room_id: roomId },
-  });
-  if (error) throw error;
+  const r = await invokeParse({ storage_path: storagePath, room_id: roomId });
+  return r.parsed;
+}
+
+/**
+ * Share-link path: the server fetches the book's preview image, stores it in the
+ * caller's folder and parses it. Returns the storage path so saveSlip can use it
+ * exactly like an upload.
+ */
+export async function callParseSlipFromLink(
+  url: string,
+  roomId: string,
+): Promise<{ parsed: ParsedSlip; storagePath: string }> {
+  const r = await invokeParse({ share_url: url, room_id: roomId });
+  if (!r.storagePath) throw new Error("parse-slip did not return the stored image path");
+  return { parsed: r.parsed, storagePath: r.storagePath };
+}
+
+/** Sportsbook share links we accept, mirrored from the Edge Function allow-list. */
+export function looksLikeShareLink(text: string): string | null {
+  const m = text.match(/https:\/\/[^\s<>"']+/i);
+  if (!m) return null;
+  try {
+    const u = new URL(m[0]);
+    const hosts = [
+      "fanduel.com",
+      "draftkings.com",
+      "dkng.co",
+      "prizepicks.com",
+      "underdogfantasy.com",
+      "betmgm.com",
+      "caesars.com",
+      "fanatics.com",
+      "fanatics.bet",
+      "kalshi.com",
+      "espnbet.com",
+      "hardrock.bet",
+      "bet365.com",
+      "betrivers.com",
+    ];
+    const h = u.hostname.toLowerCase();
+    return hosts.some((d) => h === d || h.endsWith(`.${d}`)) ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function invokeParse(
+  body: { storage_path: string; room_id: string } | { share_url: string; room_id: string },
+): Promise<{ parsed: ParsedSlip; storagePath: string | null }> {
+  const { data, error } = await supabase.functions.invoke<ParseSlipResponse>("parse-slip", { body });
+  if (error) {
+    // supabase-js wraps non-2xx in a FunctionsHttpError whose context holds the real body.
+    const ctx = (error as { context?: Response }).context;
+    if (ctx && typeof ctx.json === "function") {
+      try {
+        const j = (await ctx.json()) as { error?: string };
+        if (j?.error) throw new Error(j.error);
+      } catch (inner) {
+        if (inner instanceof Error && inner.message && !/JSON/i.test(inner.message)) throw inner;
+      }
+    }
+    throw error;
+  }
   if (!data || !data.parsed || !Array.isArray(data.parsed.legs)) {
     throw new Error("parse-slip returned an unexpected shape");
   }
   const matches = Array.isArray(data.matches) ? data.matches : [];
   return {
-    ...data.parsed,
-    legs: data.parsed.legs.map((l, i) => ({ ...l, match: matches[i]?.match ?? null })),
+    parsed: {
+      ...data.parsed,
+      legs: data.parsed.legs.map((l, i) => ({ ...l, match: matches[i]?.match ?? null })),
+    },
+    storagePath: typeof data.storage_path === "string" ? data.storage_path : null,
   };
 }
 

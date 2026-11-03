@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 
@@ -15,6 +15,9 @@ import { supabase } from "@/lib/supabase";
 export default function PickRoomScreen() {
   const router = useRouter();
   const userId = useUserId();
+  // A shared link rides along to add-slip once a room is chosen.
+  const { url } = useLocalSearchParams<{ url?: string }>();
+  const suffix = url ? `&url=${encodeURIComponent(url)}` : "";
   const [rooms, setRooms] = useState<Room[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +37,7 @@ export default function PickRoomScreen() {
         const list = (data ?? []).map((m) => m.rooms).filter((r): r is Room => !!r);
         list.sort((a, b) => a.name.localeCompare(b.name));
         if (list.length === 1) {
-          router.replace(`/add-slip?room=${list[0].id}` as never);
+          router.replace(`/add-slip?room=${list[0].id}${suffix}` as never);
           return;
         }
         setRooms(list);
@@ -42,7 +45,7 @@ export default function PickRoomScreen() {
     return () => {
       cancelled = true;
     };
-  }, [userId, router]);
+  }, [userId, router, suffix]);
 
   if (rooms === null) {
     return (
@@ -80,7 +83,7 @@ export default function PickRoomScreen() {
         <Pressable
           key={room.id}
           accessibilityRole="button"
-          onPress={() => router.replace(`/add-slip?room=${room.id}` as never)}
+          onPress={() => router.replace(`/add-slip?room=${room.id}${suffix}` as never)}
           style={({ pressed }) => [styles.row, pressed && styles.pressed]}
         >
           <T variant="heading" numberOfLines={1}>
